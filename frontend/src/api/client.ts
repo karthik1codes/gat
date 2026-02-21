@@ -141,6 +141,43 @@ export const securityInfoApi = {
   get: () => api<SecurityInfo>('/api/security-info'),
 }
 
+/** Single benchmark run: N docs. */
+export interface BenchmarkRun {
+  num_docs: number
+  doc_size_bytes: number
+  use_sqlite: boolean
+  encryption_sec?: number
+  encryption_time_ms?: number
+  upload_total_sec?: number
+  search_latency_sec?: number
+  search_time_ms?: number
+  index_size_bytes?: number
+  index_size_kb?: number
+  token_gen_100_sec?: number
+  error?: string
+}
+
+/** Scaling analysis derived from benchmark runs. */
+export interface ScalingAnalysis {
+  summary: string
+  encryption_time_per_doc_ms: number | null
+  search_time_ms_at_max_n: number | null
+  index_bytes_per_doc: number | null
+  max_n_tested?: number
+}
+
+export interface BenchmarkResponse {
+  benchmark_results: BenchmarkRun[]
+  dataset_sizes: number[]
+  doc_size_bytes: number
+  scaling_analysis: ScalingAnalysis
+  metrics_summary?: Record<string, string>
+}
+
+export const benchmarkApi = {
+  run: () => api<BenchmarkResponse>('/api/benchmark/run', { method: 'POST' }),
+}
+
 export type VaultStatus = { state: 'LOCKED' | 'UNLOCKED'; initialized: boolean }
 export type VaultStats = {
   total_encrypted_files: number

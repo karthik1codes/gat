@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   documentsApi,
   securityInfoApi,
+  benchmarkApi,
   type UploadDebugFile,
   type SearchDebugInfo,
   type SecurityInfo,
+  type BenchmarkResponse,
 } from '../api/client'
 import { useVault } from '../hooks/useVault'
 
@@ -39,6 +41,9 @@ export default function Dashboard() {
   const [searchDebug, setSearchDebug] = useState<SearchDebugInfo | null>(null)
   const [securityInfo, setSecurityInfo] = useState<SecurityInfo | null>(null)
   const [lastSearchQuery, setLastSearchQuery] = useState<string>('')
+  const [benchmarkRunning, setBenchmarkRunning] = useState(false)
+  const [benchmarkResult, setBenchmarkResult] = useState<BenchmarkResponse | null>(null)
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null)
 
   const loadDocList = useCallback(async () => {
     setLoadingDocs(true)
@@ -130,6 +135,20 @@ export default function Dashboard() {
       if (viewDocId === docId) setViewDocId(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed')
+    }
+  }
+
+  const runBenchmark = async () => {
+    setBenchmarkRunning(true)
+    setBenchmarkError(null)
+    setBenchmarkResult(null)
+    try {
+      const res = await benchmarkApi.run()
+      setBenchmarkResult(res)
+    } catch (e) {
+      setBenchmarkError(e instanceof Error ? e.message : 'Benchmark failed')
+    } finally {
+      setBenchmarkRunning(false)
     }
   }
 
@@ -530,6 +549,71 @@ export default function Dashboard() {
               </motion.button>
             )}
           </>
+        )}
+      </motion.section>
+
+      {/* Benchmark / Scaling */}
+      <motion.section
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
+        variants={cardItem}
+        whileHover={{ scale: 1.01 }}
+      >
+        <h2 className="text-lg font-medium text-[var(--color-text)] mb-1">Performance & scaling</h2>
+        <p className="text-[var(--color-muted)] text-sm mb-4">
+          Run benchmarks on isolated test data (100, 1000, 5000 docs). Shows encryption time, search time, index growth, and scaling analysis — so you see it scales, not just that it works.
+        </p>
+        <motion.button
+          type="button"
+          onClick={runBenchmark}
+          disabled={benchmarkRunning}
+          className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50"
+          whileHover={!benchmarkRunning ? btnHover : undefined}
+          whileTap={btnTap}
+        >
+          {benchmarkRunning ? 'Running benchmark…' : 'Run benchmark'}
+        </motion.button>
+        {benchmarkError && (
+          <p className="mt-3 text-sm text-red-400">{benchmarkError}</p>
+        )}
+        {benchmarkResult && (
+          <motion.div
+            className="mt-4 space-y-4"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
+              <h3 className="text-sm font-semibold text-[var(--color-text)] mb-2">Scaling summary — It scales</h3>
+              <p className="text-sm text-[var(--color-muted)]">{benchmarkResult.scaling_analysis.summary}</p>
+              {benchmarkResult.scaling_analysis.encryption_time_per_doc_ms != null && (
+                <p className="text-xs text-[var(--color-muted)] mt-2">
+                  Encryption: ~{benchmarkResult.scaling_analysis.encryption_time_per_doc_ms} ms/doc · Search at N={benchmarkResult.scaling_analysis.max_n_tested}: {benchmarkResult.scaling_analysis.search_time_ms_at_max_n} ms · Index: ~{benchmarkResult.scaling_analysis.index_bytes_per_doc} bytes/doc
+                </p>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)]">
+                    <th className="text-left py-2 pr-4 text-[var(--color-text)]">Docs (N)</th>
+                    <th className="text-right py-2 px-2 text-[var(--color-muted)]">Encryption (ms)</th>
+                    <th className="text-right py-2 px-2 text-[var(--color-muted)]">Search (ms)</th>
+                    <th className="text-right py-2 px-2 text-[var(--color-muted)]">Index (KB)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {benchmarkResult.benchmark_results.map((r) => (
+                    <tr key={r.num_docs} className="border-b border-[var(--color-border)]/50">
+                      <td className="py-2 pr-4 font-medium text-[var(--color-text)]">{r.num_docs}</td>
+                      <td className="text-right px-2 text-[var(--color-muted)]">{r.error ? '—' : (r.encryption_time_ms ?? r.encryption_sec != null ? (r.encryption_sec * 1000).toFixed(2) : '—')}</td>
+                      <td className="text-right px-2 text-[var(--color-muted)]">{r.error ? '—' : (r.search_time_ms ?? (r.search_latency_sec != null ? (r.search_latency_sec * 1000).toFixed(2) : '—'))}</td>
+                      <td className="text-right px-2 text-[var(--color-muted)]">{r.error ? '—' : (r.index_size_kb ?? (r.index_size_bytes != null ? (r.index_size_bytes / 1024).toFixed(2) : '—'))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
         )}
       </motion.section>
 
