@@ -75,7 +75,11 @@ export const documentsApi = {
     if (opts?.skip != null) params.set('skip', String(opts.skip))
     if (opts?.limit != null) params.set('limit', String(opts.limit ?? 100))
     const qs = params.toString()
-    return api<{ document_ids: string[]; total: number }>(`/api/documents/${qs ? `?${qs}` : ''}`)
+    return api<{
+      document_ids: string[]
+      total: number
+      documents?: { id: string; original_filename: string }[]
+    }>(`/api/documents/${qs ? `?${qs}` : ''}`)
   },
   delete: (docId: string) =>
     api<{ deleted: string }>(`/api/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
@@ -109,4 +113,7 @@ export const vaultApi = {
   lock: () =>
     api<{ state: string }>('/api/vault/lock', { method: 'POST' }),
   stats: () => api<VaultStats>('/api/vault/stats'),
+  /** Key for client-side string encrypt/decrypt (Locate/Decrypt tools). Vault must be unlocked. */
+  getClientStringKey: () =>
+    api<{ key_base64: string }>('/api/vault/client-string-key'),
 }

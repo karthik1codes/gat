@@ -81,3 +81,22 @@ def vault_stats(user: User = Depends(get_current_user_id)):
     """
     check_inactivity_and_lock(user.id)
     return get_vault_stats(user.id)
+
+
+@router.get("/client-string-key")
+def vault_client_string_key(user: User = Depends(get_current_user_id)):
+    """
+    Return the vault's client-side string encryption key (base64).
+    Used only by Locate Encrypted File / Decrypt File Name — client-side string
+    encrypt/decrypt; not related to SSE or document storage.
+    Requires vault to be unlocked.
+    """
+    check_inactivity_and_lock(user.id)
+    vault = get_vault(user.id)
+    if not vault.is_unlocked():
+        raise HTTPException(status_code=403, detail="Vault is locked. Unlock to use client-side string encryption.")
+    keys = vault.get_keys()
+    if not keys:
+        raise HTTPException(status_code=403, detail="Vault keys not available.")
+    import base64
+    return {"key_base64": base64.urlsafe_b64encode(keys.k_filename_enc).decode("ascii").rstrip("=")}

@@ -1,82 +1,129 @@
-import { useState, useCallback } from 'react'
-import { documentsApi } from '../api/client'
+/**
+ * Locate Encrypted File & Decrypt File Name — client-side only.
+ * Step-by-step flow to match reference: Choose a file → Select File Inside Vault → Open → Encrypted path.
+ * No dependency on SSE or document upload.
+ */
+
+import { useState, useCallback, useRef } from 'react'
+import { vaultApi } from '../api/client'
+import { encryptString, decryptString } from '../lib/clientStringCrypto'
+
+type LocateStep = 'choose' | 'select' | 'result'
 
 export default function LocateDecryptTools() {
-  const [docIds, setDocIds] = useState<string[]>([])
-  const [loadingDocs, setLoadingDocs] = useState(false)
-  const [locateOpen, setLocateOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [locateStep, setLocateStep] = useState<LocateStep>('choose')
+  const [chosenFiles, setChosenFiles] = useState<File[]>([])
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
+  const [encryptedPath, setEncryptedPath] = useState<string | null>(null)
   const [decryptOpen, setDecryptOpen] = useState(false)
-  const [selectedDocId, setSelectedDocId] = useState('')
-  const [pathInfo, setPathInfo] = useState<{ encrypted_path: string; original_filename: string } | null>(null)
-  const [pathError, setPathError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [decryptInput, setDecryptInput] = useState('')
+  const [decryptResult, setDecryptResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
 
-  const loadDocs = useCallback(async (): Promise<string[]> => {
-    setLoadingDocs(true)
-    try {
-      const { document_ids } = await documentsApi.list({ limit: 500 })
-      setDocIds(document_ids)
-      return document_ids
-    } catch {
-      setDocIds([])
-      return []
-    } finally {
-      setLoadingDocs(false)
-    }
+  const getKey = useCallback(async (): Promise<string> => {
+    const { key_base64 } = await vaultApi.getClientStringKey()
+    return key_base64
   }, [])
 
-  const onSelectDoc = useCallback(async (docId: string) => {
-    setSelectedDocId(docId)
-    setPathInfo(null)
-    setPathError(null)
-    if (!docId) return
+  // Step 1: User clicks "Locate Encrypted File" → open native "Choose a file" dialog
+  const openFilePicker = () => {
+    setError(null)
+    setChosenFiles([])
+    setSelectedFileName(null)
+    setEncryptedPath(null)
+    setLocateStep('choose')
+    fileInputRef.current?.click()
+  }
+
+  // Step 2: User selected file(s) → show "Select File Inside Vault" modal
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files?.length) return
+    const list = Array.from(files)
+    setChosenFiles(list)
+    setSelectedFileName(list[0]?.name ?? null)
+    setLocateStep('select')
+    e.target.value = ''
+  }
+
+  // Step 3 → 4: User clicks Open → encrypt filename client-side → show encrypted path
+  const handleOpenInVault = async () => {
+    const name = selectedFileName ?? chosenFiles[0]?.name
+    if (!name) return
+    setError(null)
+    setEncryptedPath(null)
+    setLoading(true)
     try {
-      const res = await documentsApi.getEncryptedPath(docId)
-      setPathInfo({ encrypted_path: res.encrypted_path, original_filename: res.original_filename })
+      const key = await getKey()
+      const encrypted = await encryptString(name, key)
+      setEncryptedPath(encrypted)
+      setLocateStep('result')
     } catch (e) {
-      setPathError(e instanceof Error ? e.message : 'Failed to load path')
+      setError(e instanceof Error ? e.message : 'Encryption failed. Is the vault unlocked?')
+    } finally {
+      setLoading(false)
     }
-  }, [])
+  }
 
-  const openLocate = () => {
-    setPathInfo(null)
-    setPathError(null)
-    setLocateOpen(true)
-    loadDocs().then(ids => {
-      if (ids.length) {
-        setSelectedDocId(ids[0])
-        onSelectDoc(ids[0])
-      }
-    })
+  const closeLocateModal = () => {
+    setLocateStep('choose')
+    setChosenFiles([])
+    setSelectedFileName(null)
+    setEncryptedPath(null)
+    setError(null)
   }
 
   const openDecrypt = () => {
-    setPathInfo(null)
-    setPathError(null)
+    setDecryptInput('')
+    setDecryptResult(null)
+    setError(null)
     setDecryptOpen(true)
-    loadDocs().then(ids => {
-      if (ids.length) {
-        setSelectedDocId(ids[0])
-        onSelectDoc(ids[0])
-      }
-    })
   }
 
-  const copyPath = () => {
-    if (pathInfo?.encrypted_path) {
-      navigator.clipboard.writeText(pathInfo.encrypted_path)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+  const handleDecrypt = async () => {
+    const text = decryptInput.trim()
+    if (!text) return
+    setError(null)
+    setDecryptResult(null)
+    setLoading(true)
+    try {
+      const key = await getKey()
+      const decrypted = await decryptString(text, key)
+      setDecryptResult(decrypted)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Decryption failed. Is the vault unlocked? Is the input valid?')
+    } finally {
+      setLoading(false)
     }
   }
 
+  const copyToClipboard = (value: string, label: string) => {
+    navigator.clipboard.writeText(value)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  const showSelectFileModal = locateStep === 'select' || locateStep === 'result'
+
   return (
     <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="sr-only"
+        aria-hidden
+        onChange={onFileSelected}
+      />
       <div className="flex flex-wrap gap-4 mt-8 p-4 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/30">
         <button
           type="button"
-          onClick={openLocate}
-          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition text-left"
+          onClick={openFilePicker}
+          title="Choose a file"
+          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition text-left"
         >
           <span className="text-sm font-mono text-[var(--color-muted)] mb-2">abc → 101010</span>
           <span className="text-sm font-medium text-[var(--color-text)]">Locate Encrypted File</span>
@@ -84,59 +131,102 @@ export default function LocateDecryptTools() {
         <button
           type="button"
           onClick={openDecrypt}
-          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition text-left"
+          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition text-left"
         >
           <span className="text-sm font-mono text-[var(--color-muted)] mb-2">101010 → abc</span>
           <span className="text-sm font-medium text-[var(--color-text)]">Decrypt File Name</span>
         </button>
       </div>
 
-      {/* Locate Encrypted File modal */}
-      {locateOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={() => setLocateOpen(false)}>
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-lg w-full p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-medium text-[var(--color-text)] mb-2">Select file inside vault</h3>
-            <p className="text-sm text-[var(--color-muted)] mb-4">Choose a document to see its encrypted storage path.</p>
-            {loadingDocs ? (
-              <p className="text-sm text-[var(--color-muted)]">Loading…</p>
-            ) : docIds.length === 0 ? (
-              <p className="text-sm text-[var(--color-muted)]">No documents in vault. Upload a file first.</p>
-            ) : (
-              <>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-2">File name:</label>
-                <select
-                  value={selectedDocId}
-                  onChange={e => onSelectDoc(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] mb-4"
-                >
-                  {docIds.map(id => (
-                    <option key={id} value={id}>{id}</option>
-                  ))}
-                </select>
-                {pathError && <p className="text-red-400 text-sm mb-2">{pathError}</p>}
-                {pathInfo && (
-                  <div className="space-y-2 mb-4">
-                    <label className="block text-xs font-medium text-[var(--color-muted)]">Encrypted path:</label>
-                    <div className="flex gap-2">
-                      <code className="flex-1 px-3 py-2 rounded bg-[var(--color-bg)] text-sm text-[var(--color-text)] break-all">
-                        {pathInfo.encrypted_path}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={copyPath}
-                        className="shrink-0 px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium"
-                      >
-                        {copied ? 'Copied' : 'Copy'}
-                      </button>
+      {/* Step 2 & 4: "Select File Inside Vault" modal — file list, File name, Open/Cancel → then Encrypted path */}
+      {showSelectFileModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={closeLocateModal}>
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-lg w-full shadow-xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-[var(--color-border)] shrink-0">
+              <h3 className="text-lg font-medium text-[var(--color-text)]">Select File Inside Vault</h3>
+            </div>
+            <div className="p-4 overflow-auto flex-1 min-h-0">
+              {locateStep === 'result' ? (
+                <>
+                  {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+                  {encryptedPath && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-[var(--color-muted)]">Encrypted path for this file:</p>
+                      <div className="flex gap-2">
+                        <code className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg)] text-sm text-[var(--color-text)] break-all border border-[var(--color-border)]">
+                          {encryptedPath}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(encryptedPath, 'locate')}
+                          className="shrink-0 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium"
+                        >
+                          {copied === 'locate' ? 'Copied' : 'Copy path'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-[var(--color-muted)]">This is the client-side encrypted form of the file name. Copy to use as encrypted path or identifier.</p>
                     </div>
+                  )}
+                </>
+              ) : chosenFiles.length === 0 ? (
+                <p className="text-sm text-[var(--color-muted)]">No file selected. Use &quot;Choose a file&quot; to select a file.</p>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-[var(--color-border)] overflow-hidden mb-4">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-[var(--color-bg)] border-b border-[var(--color-border)]">
+                          <th className="px-3 py-2 font-medium text-[var(--color-muted)]">Name</th>
+                          <th className="px-3 py-2 font-medium text-[var(--color-muted)] w-24">Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {chosenFiles.map(file => (
+                          <tr
+                            key={`${file.name}-${file.size}`}
+                            onClick={() => setSelectedFileName(file.name)}
+                            className={`border-b border-[var(--color-border)] last:border-b-0 cursor-pointer ${selectedFileName === file.name ? 'bg-[var(--color-primary)]/15' : 'hover:bg-[var(--color-bg)]'}`}
+                          >
+                            <td className="px-3 py-2 text-[var(--color-text)]">{file.name}</td>
+                            <td className="px-3 py-2 text-[var(--color-muted)]">{file.type || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </>
-            )}
-            <div className="flex justify-end gap-2 mt-4">
-              <button type="button" onClick={() => setLocateOpen(false)} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-text)]">
-                Close
-              </button>
+                  <label className="block text-sm font-medium text-[var(--color-muted)] mb-1">File name:</label>
+                  <div className="px-3 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] mb-4 text-sm">
+                    {selectedFileName ?? '—'}
+                  </div>
+                  {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+                </>
+              )}
+            </div>
+            <div className="p-4 border-t border-[var(--color-border)] flex justify-end gap-2 shrink-0">
+              {locateStep === 'result' ? (
+                <>
+                  <button type="button" onClick={() => { setLocateStep('select'); setEncryptedPath(null); setError(null) }} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-text)]">
+                    Back
+                  </button>
+                  <button type="button" onClick={closeLocateModal} className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium">
+                    Close
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={closeLocateModal} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-text)]">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenInVault}
+                    disabled={loading || !selectedFileName}
+                    className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50"
+                  >
+                    {loading ? 'Encrypting…' : 'Open'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -146,39 +236,42 @@ export default function LocateDecryptTools() {
       {decryptOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={() => setDecryptOpen(false)}>
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-lg w-full p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-medium text-[var(--color-text)] mb-2">Decrypt file name</h3>
-            <p className="text-sm text-[var(--color-muted)] mb-4">Select a document to see encrypted ID → original filename.</p>
-            {loadingDocs ? (
-              <p className="text-sm text-[var(--color-muted)]">Loading…</p>
-            ) : docIds.length === 0 ? (
-              <p className="text-sm text-[var(--color-muted)]">No documents in vault.</p>
-            ) : (
-              <>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-2">Encrypted document ID:</label>
-                <select
-                  value={selectedDocId}
-                  onChange={e => onSelectDoc(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] mb-4"
-                >
-                  {docIds.map(id => (
-                    <option key={id} value={id}>{id}</option>
-                  ))}
-                </select>
-                {pathError && <p className="text-red-400 text-sm mb-2">{pathError}</p>}
-                {pathInfo && (
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2 text-sm">
-                      <code className="px-2 py-1 rounded bg-[var(--color-bg)] text-[var(--color-muted)]">{selectedDocId}</code>
-                      <span className="text-[var(--color-muted)]">→</span>
-                      <span className="text-[var(--color-text)] font-medium">{pathInfo.original_filename}</span>
-                    </div>
-                  </div>
-                )}
-              </>
+            <h3 className="text-lg font-medium text-[var(--color-text)] mb-2">Decrypt File Name</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              Paste an encrypted string (from Locate Encrypted File). It will be decrypted on your device only.
+            </p>
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-2">Encrypted string:</label>
+            <textarea
+              value={decryptInput}
+              onChange={e => setDecryptInput(e.target.value)}
+              placeholder="Paste base64url encrypted value"
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-muted)] mb-4 font-mono text-sm"
+            />
+            {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+            {decryptResult !== null && (
+              <div className="space-y-2 mb-4">
+                <label className="block text-xs font-medium text-[var(--color-muted)]">Original:</label>
+                <div className="flex gap-2 items-center">
+                  <code className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg)] text-sm text-[var(--color-text)] border border-[var(--color-border)]">
+                    {decryptResult}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(decryptResult, 'decrypt')}
+                    className="shrink-0 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium"
+                  >
+                    {copied === 'decrypt' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
             )}
             <div className="flex justify-end gap-2 mt-4">
               <button type="button" onClick={() => setDecryptOpen(false)} className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-text)]">
                 Close
+              </button>
+              <button type="button" onClick={handleDecrypt} disabled={loading || !decryptInput.trim()} className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50">
+                {loading ? 'Decrypting…' : 'Decrypt'}
               </button>
             </div>
           </div>

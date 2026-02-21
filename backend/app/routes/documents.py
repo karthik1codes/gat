@@ -247,12 +247,14 @@ def list_documents(
     limit: int = 100,
     user: User = Depends(require_vault_unlocked),
 ):
-    """List document IDs with pagination (skip, limit)."""
+    """List document IDs with pagination (skip, limit). Includes original_filename for Locate Encrypted File."""
     client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
     ids = client._server.list_document_ids()
     total = len(ids)
     ids = ids[skip : skip + limit]
-    return {"document_ids": ids, "total": total}
+    meta = _load_doc_metadata(user.id)
+    documents = [{"id": doc_id, "original_filename": meta.get(doc_id) or doc_id} for doc_id in ids]
+    return {"document_ids": ids, "total": total, "documents": documents}
 
 
 @router.delete("/{doc_id}")
