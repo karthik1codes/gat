@@ -1,0 +1,2 @@
+Invoice for project Alpha. Please process payment by end of month.
+Total amount: 5000 USD. This document is confidential.

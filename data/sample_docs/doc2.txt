@@ -1,0 +1,2 @@
+Meeting notes: discussed the new invoice system and security requirements.
+Next steps: implement searchable encryption for confidential records.
