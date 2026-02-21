@@ -69,25 +69,31 @@ They cannot decrypt data or tokens without the client’s key.
 
 ## 4. Attack Discussion
 
-### 4.1 Frequency / Statistical Attacks
+The following attacks are relevant to SSE. We discuss how they apply to this system and what mitigations exist or are planned.
 
-- **Keyword frequency**: If the server knows the underlying language or corpus statistics, it may try to map trapdoors to likely keywords by comparing result-set sizes or co-occurrence patterns.
-- **Mitigation**: Forward-private schemes and padding (dummy results, fixed response sizes) reduce the utility of such analysis. Document and query padding are planned.
+### 4.1 Frequency attack
 
-### 4.2 Known-Keyword Attacks
+- **Idea**: The server observes result-set sizes and co-occurrence of trapdoors across documents. If it knows corpus or language statistics (e.g. word frequency), it can try to map trapdoors to likely keywords by matching observed result sizes to expected keyword frequencies.
+- **In this system**: Same keyword always yields the same trapdoor, so the server sees a stable “result size” per trapdoor. That can be compared to known statistics to guess keywords.
+- **Mitigation**: Forward-private schemes and response padding (dummy results, fixed response sizes) reduce the utility of frequency analysis. Document and query padding are planned.
 
-- If an attacker learns that a specific trapdoor corresponds to a known keyword (e.g. by client compromise or side channel), they can identify all searches for that keyword.
-- **Mitigation**: Forward privacy ensures new insertions cannot be linked to past trapdoors; constant-time comparison prevents timing side channels on token matching.
+### 4.2 Dictionary attack
 
-### 4.3 File Injection Attacks
+- **Idea**: The attacker has a list of candidate keywords (a dictionary). If they learn that a specific trapdoor corresponds to one of these keywords (e.g. via client compromise, side channel, or frequency matching), they can identify all past and future searches for that keyword.
+- **In this system**: Trapdoors are deterministic (same keyword → same token), so one revealed keyword-trapdoor pair exposes every search for that keyword.
+- **Mitigation**: Forward privacy prevents linking new insertions to past trapdoors. Constant-time comparison on the server avoids timing side channels on token matching. Keeping the key and client environment secure limits how often keyword–trapdoor pairs can be learned.
 
-- A malicious server could try to inject chosen documents and observe whether future searches match them, to infer keywords.
-- **Assumption**: We assume the server does not inject data; only the client uploads documents and index entries. In a multi-tenant setting, access control and authentication limit who can write to which partition.
+### 4.3 File injection attack
 
-### 4.4 Access Pattern Attacks
+- **Idea**: A malicious server (or an attacker who can cause documents to be indexed) injects chosen documents, then observes which future search tokens return those documents. By choosing documents with known keywords, the attacker infers which trapdoors correspond to which keywords.
+- **In this system**: We assume **the server does not inject data**; only the client uploads documents and index entries. The server is honest-but-curious, not active in writing data. In multi-tenant deployments, access control and authentication restrict who can write to which partition, limiting injection to the data owner’s own uploads.
+- **If injection were possible**: Mitigations would require forward privacy and/or client-side checks that only the data owner’s intended documents are indexed.
 
-- Repeated searches and updates reveal which documents contain which (trapdoor) keywords. Over time, this can support inference.
-- **Mitigation**: Padded responses and dummy document IDs, plus forward privacy, reduce linkability and are part of the planned upgrades.
+### 4.4 Access pattern inference
+
+- **Idea**: For each search, the server sees which document IDs are returned (the access pattern). Over many queries and updates, it can infer which documents contain which (trapdoor) keywords and build a partial or full recovery of the index layout.
+- **In this system**: The server sees every (trapdoor, set of document IDs) pair. Repeated searches and correlation over time allow inference of keyword–document relationships.
+- **Mitigation**: Padded responses and dummy document IDs (e.g. `pad_to` in search) hide the true result size and add noise. Forward privacy reduces linkability between updates and queries. These are planned or partial; full mitigation of access-pattern inference is an active research topic.
 
 ---
 

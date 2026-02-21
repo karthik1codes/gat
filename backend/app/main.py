@@ -35,6 +35,9 @@ with engine.connect() as conn:
     if "vault_salt" not in cols:
         conn.execute(text("ALTER TABLE users ADD COLUMN vault_salt BLOB"))
         conn.commit()
+    if "vault_verifier" not in cols:
+        conn.execute(text("ALTER TABLE users ADD COLUMN vault_verifier BLOB"))
+        conn.commit()
 
 app = FastAPI(
     title="Secured String Matching API",

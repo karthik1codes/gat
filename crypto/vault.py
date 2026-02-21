@@ -6,10 +6,11 @@ Vault state and key lifecycle (Cryptomator-inspired).
 - Keys never stored in plaintext on server; overwritten on lock.
 """
 
+import hashlib
 import os
 import time
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union, Tuple
 
 from .kdf import (
     VaultKeyBundle,
@@ -67,21 +68,35 @@ class VaultManager:
         self._last_activity = time.monotonic()
         return bytes(self._k_master_buf)
 
-    def load_vault(self, password: bytes, salt: Optional[bytes] = None, use_scrypt: bool = True) -> bytes:
+    def load_vault(
+        self,
+        password: bytes,
+        salt: Optional[bytes] = None,
+        use_scrypt: bool = True,
+        stored_verifier: Optional[bytes] = None,
+    ) -> Union[bytes, Tuple[bytes, bytes]]:
         """
         Unlock vault with password. Derives keys; stores in memory only.
         If salt is None, generates a new salt (caller must persist for next unlock).
-        Returns the salt to store (not secret).
+        If stored_verifier is set, verifies that password-derived K_master matches (else raises ValueError).
+        Returns salt when re-unlocking; returns (salt, verifier) when creating (salt was None).
         """
+        created = False
         if salt is None:
             salt = generate_salt()
+            created = True
         if len(salt) < 16:
             raise ValueError("Salt must be at least 16 bytes")
         self._salt = salt
         k_master, bundle = derive_vault_keys_from_password(password, salt, use_scrypt=use_scrypt)
+        verifier = hashlib.sha256(k_master).digest()
+        if stored_verifier is not None and verifier != stored_verifier:
+            raise ValueError("Invalid password")
         self._store_keys(k_master, bundle)
         self._state = VaultState.UNLOCKED
         self._last_activity = time.monotonic()
+        if created:
+            return (salt, verifier)
         return salt
 
     def unlock_with_master_key(self, k_master: bytes) -> None:

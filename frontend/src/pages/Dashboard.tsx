@@ -168,7 +168,16 @@ export default function Dashboard() {
     }
   }
 
+  /** Only documents returned by a search can be viewed; enforces SSE flow (search then access). */
+  const canViewDocument = (docId: string) =>
+    searchResults !== null && searchResults.includes(docId)
+
   const openDocument = async (docId: string) => {
+    if (!canViewDocument(docId)) {
+      setError('Search for a keyword (or substring/fuzzy/ranked) that matches this document to view its content.')
+      return
+    }
+    setError(null)
     setViewDocId(docId)
     setViewContent(null)
     try {
@@ -197,6 +206,25 @@ export default function Dashboard() {
             Privacy & threat model
           </a>
         </p>
+        <details className="mt-3 text-sm text-[var(--color-muted)]">
+          <summary className="cursor-pointer font-medium text-[var(--color-text)]">Attack discussion</summary>
+          <ul className="mt-2 space-y-1.5 list-disc list-inside">
+            <li><strong className="text-[var(--color-text)]">Frequency attack:</strong> Server may map trapdoors to likely keywords using result-set sizes and corpus statistics.</li>
+            <li><strong className="text-[var(--color-text)]">Dictionary attack:</strong> If a keyword–trapdoor pair is learned, all searches for that keyword are exposed.</li>
+            <li><strong className="text-[var(--color-text)]">File injection attack:</strong> Malicious server could inject documents and infer keywords from which searches match; we assume only the client uploads data.</li>
+            <li><strong className="text-[var(--color-text)]">Access pattern inference:</strong> Server sees which doc IDs are returned per search and can infer keyword–document relationships over time.</li>
+          </ul>
+          <p className="mt-2">
+            <a
+              href={`${import.meta.env.VITE_API_URL || ''}/api/docs/threat-model#4-attack-discussion`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--color-accent)] hover:underline"
+            >
+              Full attack discussion and mitigations
+            </a>
+          </p>
+        </details>
         <div className="flex items-center gap-2 mt-4">
           <button
             type="button"
@@ -383,7 +411,8 @@ export default function Dashboard() {
           <select
             value={searchType}
             onChange={(e) => setSearchType(e.target.value as 'keyword' | 'substring' | 'fuzzy' | 'ranked')}
-            className="px-3 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            className="pl-4 pr-10 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] appearance-none bg-[length:12px_12px] bg-[right_0.75rem_center] bg-no-repeat"
+            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")" }}
             title="Keyword: exact word. Substring: contains phrase. Fuzzy: similar spelling. Ranked: by relevance (TF-IDF)."
           >
             <option value="keyword">Keyword</option>
@@ -495,7 +524,10 @@ export default function Dashboard() {
         whileHover={{ scale: 1.01 }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-medium text-[var(--color-text)]">Your documents</h2>
+          <div>
+            <h2 className="text-lg font-medium text-[var(--color-text)]">Your documents</h2>
+            <p className="text-xs text-[var(--color-muted)] mt-0.5">View content only for documents returned by a search (keyword, substring, fuzzy, or ranked).</p>
+          </div>
           <motion.button
             type="button"
             onClick={loadDocList}
@@ -517,9 +549,10 @@ export default function Dashboard() {
                   <motion.button
                     type="button"
                     onClick={() => openDocument(id)}
-                    className="text-[var(--color-accent)] hover:underline text-left flex-1 truncate"
-                    whileHover={{ x: 2 }}
+                    className={`text-left flex-1 truncate ${canViewDocument(id) ? 'text-[var(--color-accent)] hover:underline' : 'text-[var(--color-muted)]'}`}
+                    whileHover={canViewDocument(id) ? { x: 2 } : undefined}
                     whileTap={btnTap}
+                    title={canViewDocument(id) ? 'View content' : 'Search for a matching keyword to view content'}
                   >
                     {id}
                   </motion.button>

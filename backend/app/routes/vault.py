@@ -52,17 +52,31 @@ def vault_unlock(
         raise HTTPException(status_code=400, detail="Password required")
     vault = get_vault(user.id)
     salt = user.vault_salt
+    verifier = user.vault_verifier
     if salt is None:
         from crypto.kdf import generate_salt
-        salt = generate_salt()
-        vault.load_vault(body.password.encode("utf-8"), salt=salt, use_scrypt=True)
+        result = vault.load_vault(body.password.encode("utf-8"), salt=None, use_scrypt=True)
+        salt, new_verifier = result
         user.vault_salt = salt
+        user.vault_verifier = new_verifier
         db.commit()
     else:
         try:
-            vault.load_vault(body.password.encode("utf-8"), salt=salt, use_scrypt=True)
-        except ValueError as e:
-            raise HTTPException(status_code=401, detail="Invalid password or salt")
+            vault.load_vault(
+                body.password.encode("utf-8"),
+                salt=salt,
+                use_scrypt=True,
+                stored_verifier=verifier,
+            )
+        except ValueError:
+            raise HTTPException(status_code=401, detail="Invalid password")
+        # Legacy: if vault had no verifier, store it now so future unlocks are validated
+        if verifier is None:
+            import hashlib
+            km = vault.get_k_master_for_compat()
+            if km:
+                user.vault_verifier = hashlib.sha256(km).digest()
+                db.commit()
     return {"state": "UNLOCKED"}
 
 
