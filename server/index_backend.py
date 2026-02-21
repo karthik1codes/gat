@@ -25,6 +25,10 @@ class IndexBackend:
         """Yield (key_hex, doc_ids) for all entries. Used for constant-time search."""
         raise NotImplementedError
 
+    def remove_doc_id(self, doc_id: str) -> None:
+        """Remove a document from the index (all keys that reference it)."""
+        raise NotImplementedError
+
     def close(self) -> None:
         """Release resources."""
         pass
@@ -53,6 +57,18 @@ class JsonIndexBackend(IndexBackend):
 
     def iter_entries(self) -> Iterator[Tuple[str, List[str]]]:
         yield from self._index.items()
+
+    def remove_doc_id(self, doc_id: str) -> None:
+        to_del = []
+        for key_hex, doc_ids in list(self._index.items()):
+            new_list = [d for d in doc_ids if d != doc_id]
+            if not new_list:
+                to_del.append(key_hex)
+            else:
+                self._index[key_hex] = new_list
+        for k in to_del:
+            del self._index[k]
+        self._save()
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +125,10 @@ class SqliteIndexBackend(IndexBackend):
                 current_list.append(doc_id)
         if current_key is not None:
             yield current_key, list(dict.fromkeys(current_list))
+
+    def remove_doc_id(self, doc_id: str) -> None:
+        self._conn.execute("DELETE FROM index_entries WHERE doc_id = ?", (doc_id,))
+        self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()

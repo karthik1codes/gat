@@ -1,4 +1,12 @@
-const API_BASE = import.meta.env.VITE_API_URL || ''
+// Use explicit env or default to backend on same host in dev (so it works without restart after .env change)
+function getApiBase(): string {
+  const env = import.meta.env.VITE_API_URL
+  if (env) return env
+  if (typeof window !== 'undefined' && /^localhost$|^127\.0\.0\.1$/i.test(window.location.hostname))
+    return 'http://localhost:8000'
+  return ''
+}
+export const API_BASE = getApiBase()
 
 function getToken(): string | null {
   return localStorage.getItem('access_token')
@@ -51,8 +59,50 @@ export const documentsApi = {
       body: form,
     })
   },
-  search: (q: string) =>
-    api<{ query: string; document_ids: string[] }>(`/api/documents/search?q=${encodeURIComponent(q)}`),
-  list: () => api<{ document_ids: string[] }>('/api/documents/'),
+  search: (q: string, opts?: { padTo?: number; searchType?: string; topK?: number; keywords?: string; mode?: 'and' | 'or'; skip?: number; limit?: number }) => {
+    const params = new URLSearchParams({ q })
+    if (opts?.padTo != null && opts.padTo > 0) params.set('pad_to', String(opts.padTo))
+    if (opts?.searchType) params.set('search_type', opts.searchType)
+    if (opts?.topK != null && opts.topK > 0) params.set('top_k', String(opts.topK))
+    if (opts?.keywords) params.set('keywords', opts.keywords)
+    if (opts?.mode) params.set('mode', opts.mode)
+    if (opts?.skip != null) params.set('skip', String(opts.skip))
+    if (opts?.limit != null) params.set('limit', String(opts.limit))
+    return api<{ query: string; document_ids: string[]; total?: number }>(`/api/documents/search?${params}`)
+  },
+  list: (opts?: { skip?: number; limit?: number }) => {
+    const params = new URLSearchParams()
+    if (opts?.skip != null) params.set('skip', String(opts.skip))
+    if (opts?.limit != null) params.set('limit', String(opts.limit ?? 100))
+    const qs = params.toString()
+    return api<{ document_ids: string[]; total: number }>(`/api/documents/${qs ? `?${qs}` : ''}`)
+  },
+  delete: (docId: string) =>
+    api<{ deleted: string }>(`/api/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
   getContent: (docId: string) => apiText(`/api/documents/${encodeURIComponent(docId)}/content`),
+}
+
+export type VaultStatus = { state: 'LOCKED' | 'UNLOCKED'; initialized: boolean }
+export type VaultStats = {
+  total_encrypted_files: number
+  total_encrypted_size_bytes: number
+  index_size_bytes: number
+  encryption_algorithm: string
+  kdf_algorithm: string
+  kdf_iterations_equivalent: number
+  last_unlock_timestamp: number | null
+  vault_state: string
+}
+
+export const vaultApi = {
+  status: () => api<VaultStatus>('/api/vault/status'),
+  unlock: (password: string) =>
+    api<{ state: string }>('/api/vault/unlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }),
+  lock: () =>
+    api<{ state: string }>('/api/vault/lock', { method: 'POST' }),
+  stats: () => api<VaultStats>('/api/vault/stats'),
 }

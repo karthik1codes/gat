@@ -34,3 +34,20 @@ DATABASE_URL = os.environ.get("GAT_DATABASE_URL", f"sqlite:///{ROOT_DIR / 'backe
 
 # Per-user storage base for SSE
 USER_STORAGE_BASE = ROOT_DIR / "backend" / "data" / "user_storage"
+
+# Input validation
+MAX_UPLOAD_BYTES = int(os.environ.get("GAT_MAX_UPLOAD_BYTES", 5 * 1024 * 1024))  # 5 MiB
+def _allowed_extensions() -> frozenset:
+    raw = os.environ.get("GAT_ALLOWED_EXTENSIONS", ".txt,.md,.csv").lower().replace(" ", "")
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    return frozenset(p if p.startswith(".") else f".{p}" for p in parts)
+
+
+ALLOWED_UPLOAD_EXTENSIONS = _allowed_extensions()
+MAX_SEARCH_QUERY_LENGTH = int(os.environ.get("GAT_MAX_SEARCH_QUERY_LENGTH", 500))
+MAX_KEYWORDS_MULTI = int(os.environ.get("GAT_MAX_KEYWORDS_MULTI", 20))
+
+# Rate limits (per user): requests per window
+RATE_LIMIT_UPLOAD_PER_MINUTE = int(os.environ.get("GAT_RATE_LIMIT_UPLOAD", 30))
+RATE_LIMIT_SEARCH_PER_MINUTE = int(os.environ.get("GAT_RATE_LIMIT_SEARCH", 60))
+RATE_LIMIT_WINDOW_SECONDS = 60

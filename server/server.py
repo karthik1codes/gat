@@ -122,6 +122,18 @@ class SSEServer:
         """Return encrypted document by ID, or None if not found."""
         return self._documents.get(doc_id)
 
+    def delete_document(self, doc_id: str) -> bool:
+        """Remove document and its index entries. Returns True if doc existed."""
+        with self._lock:
+            if doc_id not in self._documents:
+                return False
+            del self._documents[doc_id]
+            doc_path = self._docs_path() / doc_id
+            if doc_path.exists():
+                doc_path.unlink()
+            self._backend.remove_doc_id(doc_id)
+        return True
+
     def list_document_ids(self) -> List[str]:
         """Return all stored document IDs (for debugging)."""
         return list(self._documents.keys())

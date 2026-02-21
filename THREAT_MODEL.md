@@ -50,8 +50,8 @@ They cannot decrypt data or tokens without the client’s key.
 |--------|-------------|--------------------|
 | **Search pattern** | Same keyword → same trapdoor → server learns that two searches are for the same keyword. | Mitigated by **forward-private SSE**: per-keyword counter; tokens include counter so server cannot link past searches to future insertions. Optional client methods `upload_documents_forward_secure` / `search_forward_secure`. |
 | **Access pattern** | For each search, the server sees which document IDs were returned. | **Padded response**: server returns fixed-size list (pad_to) with dummy doc IDs and shuffle; client filters to known doc IDs. |
-| **Volume** | Number of documents, number of index entries, size of result sets. | Padding and fixed-size responses (future work). |
-| **Ciphertext size** | Length of each stored ciphertext. | Padding to fixed block sizes (future work). |
+| **Volume** | Number of documents, number of index entries, size of result sets. | Padded search (`pad_to` parameter) returns fixed-size response; client filters to real doc IDs. |
+| **Ciphertext size** | Length of each stored ciphertext. | **Document padding**: pad plaintext to fixed block sizes before encryption to hide exact length (future work). |
 
 ### 3.2 What Does Not Leak (under our assumptions)
 

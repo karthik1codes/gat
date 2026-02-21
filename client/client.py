@@ -127,18 +127,23 @@ class SSEClient:
             index[k] = list(dict.fromkeys(index[k]))
         self._server.upload_index(index)
 
-    def search_forward_secure(self, keyword_counter: Dict[str, int], query: str) -> List[str]:
+    def search_forward_secure(
+        self, keyword_counter: Dict[str, int], query: str, pad_to: int = 0
+    ) -> List[str]:
         """
         Search using forward-private tokens: send tokens for counter 0..max-1.
         Returns union of doc_ids for the keyword (all counter versions).
+        If pad_to > 0, server returns padded list; client filters to known doc IDs.
         """
         w = query.strip().lower()
         max_c = keyword_counter.get(w, 0)
         if max_c == 0:
             return []
         tokens = build_forward_secure_search_tokens(w, max_c, self._key)
-        raw = self._server.search_multi(tokens)
-        return raw  # caller may filter by known_doc_ids if using padding
+        raw = self._server.search_multi(tokens, pad_to=pad_to)
+        if pad_to > 0 and self._known_doc_ids:
+            return [x for x in raw if x in self._known_doc_ids]
+        return raw
 
     # -------------------------------------------------------------------------
     # Substring search: encrypted n-gram index; search = intersection of sets.

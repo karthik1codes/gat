@@ -23,7 +23,7 @@ def get_or_create_sse_client(user_id: str, sse_key_encrypted: Optional[bytes]) -
     """
     storage_dir = USER_STORAGE_BASE / user_id
     storage_dir.mkdir(parents=True, exist_ok=True)
-    server = SSEServer(storage_dir=storage_dir)
+    server = SSEServer(storage_dir=storage_dir, use_sqlite_index=True)
 
     if sse_key_encrypted:
         key = decrypt_sse_key(sse_key_encrypted)

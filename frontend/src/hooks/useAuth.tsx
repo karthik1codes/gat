@@ -37,8 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshUser()
   }, [refreshUser])
 
-  const login = useCallback((accessToken: string) => {
+  const login = useCallback((accessToken: string, userFromBackend?: User) => {
     localStorage.setItem('access_token', accessToken)
+    if (userFromBackend) {
+      setUser(userFromBackend)
+      setLoading(false)
+    }
     refreshUser()
   }, [refreshUser])
 

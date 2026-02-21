@@ -10,17 +10,33 @@ A secure system that enables **string matching on encrypted data** while preserv
 - **Exact keyword search**: Generate a search token for a query; server returns matching document IDs without seeing the query or document contents
 - **Client/Server split**: Client holds the secret key; server stores only ciphertexts and the encrypted index
 
+## Vault architecture (Cryptomator-grade)
+
+Optional **vault** layer adds password-based key derivation and in-memory key lifecycle:
+
+- **Vault states**: `LOCKED` (no decryption) / `UNLOCKED` (keys in memory only). Manual lock and configurable inactivity auto-lock.
+- **Key derivation**: Scrypt (or PBKDF2-HMAC-SHA256, 200k+ iterations) from password + 32-byte salt → K_master; then HKDF to derive:
+  - **K_file_enc** (AES-256-GCM file encryption), **K_filename_enc** (filename encryption), **K_search** / **K_index** (search/index), **K_index_mac** (index integrity).
+- **File encryption**: `crypto/file_encryption.py` — 96-bit IV, authenticated encryption; optional metadata HMAC.
+- **Filename encryption**: `crypto/filename_encryption.py` — server stores only base64-encoded ciphertext; no plaintext filenames.
+- **Index integrity**: `crypto/index_protection.py` — HMAC(K_index_mac) per index block/entry; verify before using search results.
+- **API**: `POST /api/vault/unlock`, `POST /api/vault/lock`, `GET /api/vault/status`, `GET /api/vault/stats` (total files, size, algorithm, KDF, last unlock).
+- Keys are **never** stored in plaintext on the server; cleared from memory on lock. See `THREAT_MODEL.md` for leakage and assumptions.
+
+Existing SSE flow (document encrypt/search/retrieve) is unchanged; vault is additive for password-unlock and future vault-key–based uploads.
+
 ## Project structure
 
 ```
 gat/
-├── crypto/           # SSE: keys (HKDF), sse (AES-GCM, trapdoors), constant-time compare
+├── crypto/           # SSE + vault: keys, kdf, vault, sse, file_encryption, filename_encryption, index_protection
 ├── client/           # Data owner: encrypt, build index, search token, decrypt
 ├── server/           # Untrusted server: store index + docs, match token → doc IDs
-├── backend/          # Full-stack: FastAPI app, Google OAuth, REST API
-│   ├── app/          # main, auth, routes, sse_service, database
+├── backend/          # Full-stack: FastAPI app, Google OAuth, REST API, vault API
+│   ├── app/          # main, auth, routes, services (vault_service), sse_service, database
 │   └── requirements.txt
 ├── frontend/         # React + Vite + Tailwind, Google sign-in, dashboard
+├── tests/            # Security tests: vault, KDF, encryption, index integrity
 ├── data/sample_docs/
 ├── cli.py            # Command-line interface
 ├── requirements.txt

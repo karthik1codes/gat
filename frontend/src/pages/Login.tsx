@@ -1,20 +1,30 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../hooks/useAuth'
-import { authApi } from '../api/client'
+import { authApi, API_BASE } from '../api/client'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 
 function LoginContent() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [backendOk, setBackendOk] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${API_BASE}/api/health`)
+      .then((r) => { if (!cancelled) setBackendOk(r.ok) })
+      .catch(() => { if (!cancelled) setBackendOk(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const handleGoogleSuccess = async (credentialResponse: { credential?: string }) => {
     const idToken = credentialResponse.credential
     if (!idToken) return
     try {
-      const { access_token } = await authApi.google(idToken)
-      login(access_token)
+      const { access_token, user: userFromBackend } = await authApi.google(idToken)
+      login(access_token, userFromBackend)
       navigate('/', { replace: true })
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Login failed.'
@@ -35,6 +45,11 @@ function LoginContent() {
         <p className="text-[var(--color-muted)] mb-8">
           Search on encrypted data without revealing it.
         </p>
+        {backendOk === false && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+            Backend not reachable. Start it: <code className="block mt-1 font-mono text-xs">uvicorn backend.app.main:app --reload --port 8000</code>
+          </div>
+        )}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 shadow-xl">
           {GOOGLE_CLIENT_ID ? (
             <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>

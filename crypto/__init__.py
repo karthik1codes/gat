@@ -15,6 +15,14 @@ from .sse import (
     encrypt_keyword_for_index,
     trapdoor_matches,
 )
+from .kdf import (
+    VaultKeyBundle,
+    derive_vault_keys,
+    scrypt_derive,
+    pbkdf2_derive,
+    generate_salt,
+)
+from .vault import VaultManager, VaultState
 
 __all__ = [
     "KeyBundle",
@@ -28,4 +36,11 @@ __all__ = [
     "build_trapdoor",
     "encrypt_keyword_for_index",
     "trapdoor_matches",
+    "VaultKeyBundle",
+    "derive_vault_keys",
+    "scrypt_derive",
+    "pbkdf2_derive",
+    "generate_salt",
+    "VaultManager",
+    "VaultState",
 ]
