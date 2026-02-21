@@ -6,7 +6,7 @@ type User = { id: string; email: string; name: string | null; picture: string | 
 const AuthContext = createContext<{
   user: User
   loading: boolean
-  login: (accessToken: string) => void
+  login: (accessToken: string, userFromBackend?: User) => void
   logout: () => void
   refreshUser: () => Promise<void>
 } | null>(null)

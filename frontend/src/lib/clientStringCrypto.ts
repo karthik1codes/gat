@@ -27,7 +27,7 @@ export async function encryptString(plaintext: string, keyBase64: string): Promi
   const keyBytes = base64UrlToBytes(keyBase64)
   const key = await crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes as BufferSource,
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt']
@@ -49,7 +49,7 @@ export async function decryptString(ciphertextBase64: string, keyBase64: string)
   const keyBytes = base64UrlToBytes(keyBase64)
   const key = await crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes as BufferSource,
     { name: 'AES-GCM', length: 256 },
     false,
     ['decrypt']
@@ -61,9 +61,9 @@ export async function decryptString(ciphertextBase64: string, keyBase64: string)
   const nonce = combined.slice(0, GCM_NONCE_BYTES)
   const ciphertext = combined.slice(GCM_NONCE_BYTES)
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+    { name: 'AES-GCM', iv: nonce as BufferSource, tagLength: 128 },
     key,
-    ciphertext
+    ciphertext as BufferSource
   )
   return new TextDecoder().decode(decrypted)
 }

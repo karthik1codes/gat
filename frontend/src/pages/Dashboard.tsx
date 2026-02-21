@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   documentsApi,
   securityInfoApi,
@@ -7,6 +8,11 @@ import {
   type SecurityInfo,
 } from '../api/client'
 import { useVault } from '../hooks/useVault'
+
+const cardItem = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } }
+const containerVariants = { initial: {}, animate: { transition: { staggerChildren: 0.05, delayChildren: 0.05 } } }
+const btnHover = { scale: 1.03, transition: { duration: 0.2 } }
+const btnTap = { scale: 0.98 }
 
 export default function Dashboard() {
   const { refresh: refreshVault } = useVault()
@@ -155,8 +161,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
+    <motion.div className="space-y-8" initial="initial" animate="animate" variants={containerVariants}>
+      <motion.div variants={cardItem}>
         <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-1">Dashboard</h1>
         <p className="text-[var(--color-muted)] text-sm">
           Upload documents (encrypted). Search by keyword. Only you can decrypt.
@@ -172,60 +178,83 @@ export default function Dashboard() {
             Privacy & threat model
           </a>
         </p>
-        <label className="flex items-center gap-2 mt-4 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={judgeMode}
-            onChange={(e) => setJudgeMode(e.target.checked)}
-            className="rounded border-[var(--color-border)]"
-          />
+        <div className="flex items-center gap-2 mt-4">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={judgeMode}
+            onClick={() => setJudgeMode((v) => !v)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border border-[var(--color-border)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 focus:ring-offset-[var(--color-bg)] ${judgeMode ? 'bg-[var(--color-primary)]/30' : 'bg-[var(--color-bg)]'}`}
+          >
+            <motion.span
+              className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-[var(--color-primary)] shadow"
+              animate={{ x: judgeMode ? 20 : 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            />
+          </button>
           <span className="text-sm font-medium text-[var(--color-text)]">
             Judge Mode (Cryptographic Trace)
           </span>
-        </label>
-        <p className="text-[var(--color-muted)] text-xs mt-1 ml-6">
+        </div>
+        <p className="text-[var(--color-muted)] text-xs mt-1 ml-[3.25rem]">
           When on, upload and search include safe trace metadata so you can see client/server steps without exposing secrets.
         </p>
-        {judgeMode && securityInfo && (
-          <div className="mt-4 p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-            <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Security metrics</h3>
-            <ul className="space-y-2 text-sm">
-              <li className="text-[var(--color-muted)]">Encryption: {securityInfo.encryption}</li>
-              <li className="text-[var(--color-muted)]">Token generation: {securityInfo.token_generation}</li>
-              <li className="text-[var(--color-muted)]">Key size: {securityInfo.key_size_bits} bits</li>
-            </ul>
-            <p className="text-sm font-medium text-[var(--color-text)] mt-3 mb-2">Leakage profile</p>
-            <ul className="space-y-1 text-sm">
-              <li className="flex items-center gap-2">
-                <span className={securityInfo.leakage_profile.search_pattern ? 'text-amber-400' : 'text-green-400'} aria-hidden>●</span>
-                Search pattern: {securityInfo.leakage_profile.search_pattern ? 'visible (token equality)' : 'hidden'}
-              </li>
-              <li className="flex items-center gap-2">
-                <span className={securityInfo.leakage_profile.access_pattern ? 'text-amber-400' : 'text-green-400'} aria-hidden>●</span>
-                Access pattern: {securityInfo.leakage_profile.access_pattern ? 'visible (which docs match)' : 'hidden'}
-              </li>
-              <li className="flex items-center gap-2">
-                <span className={securityInfo.leakage_profile.content_leakage ? 'text-red-400' : 'text-green-400'} aria-hidden>●</span>
-                Content leakage: {securityInfo.leakage_profile.content_leakage ? 'yes' : 'no'}
-              </li>
-            </ul>
-          </div>
-        )}
-      </div>
+        <AnimatePresence>
+          {judgeMode && securityInfo && (
+            <motion.div
+              className="mt-4 p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+            >
+              <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Security metrics</h3>
+              <ul className="space-y-2 text-sm">
+                <li className="text-[var(--color-muted)]">Encryption: {securityInfo.encryption}</li>
+                <li className="text-[var(--color-muted)]">Token generation: {securityInfo.token_generation}</li>
+                <li className="text-[var(--color-muted)]">Key size: {securityInfo.key_size_bits} bits</li>
+              </ul>
+              <p className="text-sm font-medium text-[var(--color-text)] mt-3 mb-2">Leakage profile</p>
+              <ul className="space-y-1 text-sm">
+                <li className="flex items-center gap-2">
+                  <span className={securityInfo.leakage_profile.search_pattern ? 'text-amber-400' : 'text-green-400'} aria-hidden>●</span>
+                  Search pattern: {securityInfo.leakage_profile.search_pattern ? 'visible (token equality)' : 'hidden'}
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={securityInfo.leakage_profile.access_pattern ? 'text-amber-400' : 'text-green-400'} aria-hidden>●</span>
+                  Access pattern: {securityInfo.leakage_profile.access_pattern ? 'visible (which docs match)' : 'hidden'}
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={securityInfo.leakage_profile.content_leakage ? 'text-red-400' : 'text-green-400'} aria-hidden>●</span>
+                  Content leakage: {securityInfo.leakage_profile.content_leakage ? 'yes' : 'no'}
+                </li>
+              </ul>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       {error && (
-        <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-sm p-4">
+        <motion.div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-sm p-4" variants={cardItem}>
           {error}
-        </div>
+        </motion.div>
       )}
 
       {/* Upload */}
-      <section className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6">
+      <motion.section
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
+        variants={cardItem}
+        whileHover={{ scale: 1.01 }}
+      >
         <h2 className="text-lg font-medium text-[var(--color-text)] mb-3">Upload documents</h2>
         <p className="text-[var(--color-muted)] text-sm mb-4">
           Files are encrypted and indexed by keywords. Server never sees plaintext.
         </p>
-        <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium cursor-pointer hover:bg-[var(--color-primary-hover)] transition disabled:opacity-50">
+        <motion.label
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium cursor-pointer transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.4)] disabled:opacity-50"
+          whileHover={!uploading ? btnHover : undefined}
+          whileTap={!uploading ? btnTap : undefined}
+        >
           <input
             type="file"
             multiple
@@ -235,10 +264,25 @@ export default function Dashboard() {
             disabled={uploading}
           />
           {uploading ? 'Uploading…' : 'Choose files'}
-        </label>
+        </motion.label>
         {lastUploaded.length > 0 && (
-          <div className="mt-4 p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
-            <p className="text-sm font-medium text-[var(--color-text)] mb-2">Uploaded and encrypted — stored at:</p>
+          <motion.div
+            className="mt-4 p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.25 }}
+          >
+            <p className="text-sm font-medium text-[var(--color-text)] mb-2 flex items-center gap-2">
+              <motion.span
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-accent)] text-white"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+              >
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+              </motion.span>
+              Uploaded and encrypted — stored at:
+            </p>
             <ul className="space-y-2">
               {lastUploaded.map((u) => (
                 <li key={u.id} className="flex flex-wrap items-center gap-2 text-sm">
@@ -246,18 +290,20 @@ export default function Dashboard() {
                   <code className="flex-1 min-w-0 truncate px-2 py-1 rounded bg-[var(--color-surface)] text-[var(--color-text)]" title={u.encrypted_path}>
                     {u.encrypted_path}
                   </code>
-                  <button
+                  <motion.button
                     type="button"
                     onClick={() => copyEncryptedPath(u.encrypted_path)}
                     className="shrink-0 px-2 py-1 rounded bg-[var(--color-primary)] text-white text-xs font-medium"
+                    whileHover={btnHover}
+                    whileTap={btnTap}
                   >
                     {copiedPath === u.encrypted_path ? 'Copied' : 'Copy path'}
-                  </button>
+                  </motion.button>
                 </li>
               ))}
             </ul>
             <p className="text-xs text-[var(--color-muted)] mt-2">Use &quot;Locate Encrypted File&quot; below to open this path for any document.</p>
-          </div>
+          </motion.div>
         )}
         {judgeMode && uploadDebug && uploadDebug.length > 0 && (
           <div className="mt-4 p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
@@ -291,10 +337,14 @@ export default function Dashboard() {
             </details>
           </div>
         )}
-      </section>
+      </motion.section>
 
       {/* Search */}
-      <section className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6">
+      <motion.section
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
+        variants={cardItem}
+        whileHover={{ scale: 1.01 }}
+      >
         <h2 className="text-lg font-medium text-[var(--color-text)] mb-3">Search encrypted data</h2>
         <p className="text-[var(--color-muted)] text-sm mb-4">
           Enter a keyword. Matching is done on the server using a search token — the server never sees your query.
@@ -335,13 +385,15 @@ export default function Dashboard() {
               />
             </label>
           )}
-          <button
+          <motion.button
             type="submit"
             disabled={searching}
-            className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary-hover)] transition disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.4)] disabled:opacity-50"
+            whileHover={!searching ? btnHover : undefined}
+            whileTap={!searching ? btnTap : undefined}
           >
             {searching ? 'Searching…' : 'Search'}
-          </button>
+          </motion.button>
           </div>
           <label className="flex items-center gap-2 text-sm text-[var(--color-muted)] cursor-pointer">
             <input
@@ -354,28 +406,30 @@ export default function Dashboard() {
           </label>
         </form>
         {searchResults !== null && (
-          <div className="mt-4">
+          <motion.div className="mt-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
             <p className="text-sm text-[var(--color-muted)] mb-2">
               Found {searchResults.length} document(s)
               {searchTotal != null && searchTotal !== searchResults.length ? ` (total: ${searchTotal})` : ''}
             </p>
-            <ul className="space-y-1">
+            <motion.ul className="space-y-1" variants={containerVariants} initial="initial" animate="animate">
               {searchResults.length === 0 ? (
-                <li className="text-[var(--color-muted)] text-sm">No matches.</li>
+                <motion.li className="text-[var(--color-muted)] text-sm" variants={cardItem}>No matches.</motion.li>
               ) : (
                 searchResults.map((id) => (
-                  <li key={id}>
-                    <button
+                  <motion.li key={id} variants={cardItem}>
+                    <motion.button
                       type="button"
                       onClick={() => openDocument(id)}
                       className="text-[var(--color-accent)] hover:underline text-left"
+                      whileHover={{ x: 2 }}
+                      whileTap={btnTap}
                     >
                       {id}
-                    </button>
-                  </li>
+                    </motion.button>
+                  </motion.li>
                 ))
               )}
-            </ul>
+            </motion.ul>
             {judgeMode && searchDebug && (
               <div className="mt-4 p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
                 <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Search execution trace</h3>
@@ -411,22 +465,28 @@ export default function Dashboard() {
                 </details>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
-      </section>
+      </motion.section>
 
       {/* Document list */}
-      <section className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6">
+      <motion.section
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
+        variants={cardItem}
+        whileHover={{ scale: 1.01 }}
+      >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-medium text-[var(--color-text)]">Your documents</h2>
-          <button
+          <motion.button
             type="button"
             onClick={loadDocList}
             disabled={loadingDocs}
             className="text-sm text-[var(--color-primary)] hover:underline disabled:opacity-50"
+            whileHover={!loadingDocs ? { scale: 1.02 } : undefined}
+            whileTap={btnTap}
           >
             {loadingDocs ? 'Loading…' : 'Refresh'}
-          </button>
+          </motion.button>
         </div>
         {docIds.length === 0 && !loadingDocs ? (
           <p className="text-[var(--color-muted)] text-sm">No documents yet. Upload some above.</p>
@@ -435,64 +495,82 @@ export default function Dashboard() {
             <ul className="space-y-1">
               {docIds.map((id) => (
                 <li key={id} className="flex items-center justify-between gap-2 group">
-                  <button
+                  <motion.button
                     type="button"
                     onClick={() => openDocument(id)}
                     className="text-[var(--color-accent)] hover:underline text-left flex-1 truncate"
+                    whileHover={{ x: 2 }}
+                    whileTap={btnTap}
                   >
                     {id}
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
                     type="button"
                     onClick={(e) => handleDelete(id, e)}
                     className="text-red-400 hover:text-red-300 text-sm opacity-70 group-hover:opacity-100"
                     title="Delete document"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={btnTap}
                   >
                     Delete
-                  </button>
+                  </motion.button>
                 </li>
               ))}
             </ul>
             {totalDocs > docIds.length && (
-              <button
+              <motion.button
                 type="button"
                 onClick={loadMoreDocs}
                 disabled={loadingDocs}
                 className="mt-3 text-sm text-[var(--color-primary)] hover:underline disabled:opacity-50"
+                whileHover={!loadingDocs ? { scale: 1.02 } : undefined}
+                whileTap={btnTap}
               >
                 {loadingDocs ? 'Loading…' : `Load more (${docIds.length} of ${totalDocs})`}
-              </button>
+              </motion.button>
             )}
           </>
         )}
-      </section>
+      </motion.section>
 
       {/* View document modal */}
-      {viewDocId && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
-          onClick={() => setViewDocId(null)}
-        >
-          <div
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {viewDocId && (
+          <motion.div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
+            onClick={() => setViewDocId(null)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
           >
-            <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
-              <span className="font-medium text-[var(--color-text)] truncate">{viewDocId}</span>
-              <button
-                type="button"
-                onClick={() => setViewDocId(null)}
-                className="text-[var(--color-muted)] hover:text-[var(--color-text)]"
-              >
-                Close
-              </button>
-            </div>
-            <pre className="p-4 overflow-auto text-sm text-[var(--color-text)] whitespace-pre-wrap flex-1">
-              {viewContent ?? 'Loading…'}
-            </pre>
-          </div>
-        </div>
-      )}
-    </div>
+            <motion.div
+              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+                <span className="font-medium text-[var(--color-text)] truncate">{viewDocId}</span>
+                <motion.button
+                  type="button"
+                  onClick={() => setViewDocId(null)}
+                  className="text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                  whileHover={btnHover}
+                  whileTap={btnTap}
+                >
+                  Close
+                </motion.button>
+              </div>
+              <pre className="p-4 overflow-auto text-sm text-[var(--color-text)] whitespace-pre-wrap flex-1">
+                {viewContent ?? 'Loading…'}
+              </pre>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }

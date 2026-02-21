@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react'
+import { motion } from 'framer-motion'
 import { vaultApi } from '../api/client'
 import { encryptString, decryptString } from '../lib/clientStringCrypto'
 
@@ -118,30 +119,34 @@ export default function LocateDecryptTools() {
         aria-hidden
         onChange={onFileSelected}
       />
-      <div className="flex flex-wrap gap-4 mt-8 p-4 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/30">
-        <button
+      <motion.div className="flex flex-wrap gap-4 mt-8 p-4 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
+        <motion.button
           type="button"
           onClick={openFilePicker}
           title="Choose a file"
-          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition text-left"
+          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition-colors duration-200 text-left"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
         >
           <span className="text-sm font-mono text-[var(--color-muted)] mb-2">abc → 101010</span>
           <span className="text-sm font-medium text-[var(--color-text)]">Locate Encrypted File</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           type="button"
           onClick={openDecrypt}
-          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition text-left"
+          className="flex flex-col items-center justify-center min-w-[180px] py-4 px-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-surface)] transition-colors duration-200 text-left"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
         >
           <span className="text-sm font-mono text-[var(--color-muted)] mb-2">101010 → abc</span>
           <span className="text-sm font-medium text-[var(--color-text)]">Decrypt File Name</span>
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
 
       {/* Step 2 & 4: "Select File Inside Vault" modal — file list, File name, Open/Cancel → then Encrypted path */}
       {showSelectFileModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={closeLocateModal}>
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-lg w-full shadow-xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+        <motion.div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={closeLocateModal} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+          <motion.div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-lg w-full shadow-xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.2 }}>
             <div className="p-4 border-b border-[var(--color-border)] shrink-0">
               <h3 className="text-lg font-medium text-[var(--color-text)]">Select File Inside Vault</h3>
             </div>
@@ -228,14 +233,14 @@ export default function LocateDecryptTools() {
                 </>
               )}
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Decrypt File Name modal */}
       {decryptOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={() => setDecryptOpen(false)}>
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-lg w-full p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+        <motion.div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={() => setDecryptOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+          <motion.div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-lg w-full p-6 shadow-xl" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.2 }}>
             <h3 className="text-lg font-medium text-[var(--color-text)] mb-2">Decrypt File Name</h3>
             <p className="text-sm text-[var(--color-muted)] mb-4">
               Paste an encrypted string (from Locate Encrypted File). It will be decrypted on your device only.
@@ -274,8 +279,8 @@ export default function LocateDecryptTools() {
                 {loading ? 'Decrypting…' : 'Decrypt'}
               </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
     </>
   )

@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg: #0f0f12;
-  --color-surface: #18181c;
+  --color-bg: #0F1115;
+  --color-surface: #1A1D24;
+  --color-card: #1A1D24;
   --color-border: #2a2a30;
-  --color-primary: #6366f1;
-  --color-primary-hover: #818cf8;
-  --color-accent: #22d3ee;
-  --color-text: #f4f4f5;
-  --color-muted: #a1a1aa;
+  --color-primary: #8B5CF6;
+  --color-primary-hover: #a78bfa;
+  --color-accent: #22C55E;
+  --color-accent-purple: #8B5CF6;
+  --color-text: #E5E7EB;
+  --color-muted: #9CA3AF;
 }
 
 body {
@@ -21,4 +23,42 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* Subtle radial gradient background (low opacity, non-distracting) */
+.vault-bg-gradient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    ellipse 120% 80% at 50% 0%,
+    rgba(139, 92, 246, 0.06) 0%,
+    transparent 50%
+  ),
+  radial-gradient(
+    ellipse 80% 60% at 80% 80%,
+    rgba(34, 197, 94, 0.04) 0%,
+    transparent 50%
+  );
+}
+
+/* Vault status: unlocked = green breathing glow */
+@keyframes vault-glow-green {
+  0%, 100% { box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); opacity: 1; }
+  50% { box-shadow: 0 0 16px rgba(34, 197, 94, 0.6); opacity: 0.9; }
+}
+
+.vault-status-unlocked {
+  animation: vault-glow-green 2s ease-in-out infinite;
+}
+
+/* Vault status: locked = subtle red */
+.vault-status-locked {
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.3);
+}
+
+@keyframes vault-gradient-shift {
+  0%, 100% { opacity: 0.04; }
+  50% { opacity: 0.08; }
 }

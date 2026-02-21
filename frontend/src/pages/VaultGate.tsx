@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { useVault } from '../hooks/useVault'
 import VaultLayout from '../components/VaultLayout'
 
@@ -18,7 +19,7 @@ export default function VaultGate() {
   if (loading || !status) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
-        <div className="animate-pulse text-[var(--color-muted)]">Loading vault…</div>
+        <motion.div className="animate-pulse text-[var(--color-muted)]" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>Loading vault…</motion.div>
       </div>
     )
   }
@@ -64,8 +65,9 @@ export default function VaultGate() {
 
   if (!status.initialized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-4">
-        <div className="w-full max-w-md">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4 relative">
+        <div className="vault-bg-gradient" aria-hidden />
+        <motion.div className="w-full max-w-md relative z-10" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }}>
           <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-2">Create New Vault</h1>
           <p className="text-[var(--color-muted)] text-sm mb-6">
             Set a password to protect your encrypted documents. You will need this password to unlock the vault.
@@ -94,22 +96,19 @@ export default function VaultGate() {
               />
             </div>
             {error && <p className="text-red-400 text-sm">{error}</p>}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50"
-            >
+            <motion.button type="submit" disabled={submitting} className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50 transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.35)]" whileHover={!submitting ? { scale: 1.02 } : undefined} whileTap={{ scale: 0.98 }}>
               {submitting ? 'Creating…' : 'Create vault'}
-            </button>
+            </motion.button>
           </form>
-        </div>
+        </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4 relative">
+      <div className="vault-bg-gradient" aria-hidden />
+      <motion.div className="w-full max-w-md relative z-10" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }}>
         <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-2">Unlock vault</h1>
         <p className="text-[var(--color-muted)] text-sm mb-6">
           Enter your vault password to access your documents.
@@ -127,15 +126,11 @@ export default function VaultGate() {
             />
           </div>
           {error && <p className="text-red-400 text-sm">{error}</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50"
-          >
+          <motion.button type="submit" disabled={submitting} className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50 transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.35)]" whileHover={!submitting ? { scale: 1.02 } : undefined} whileTap={{ scale: 0.98 }}>
             {submitting ? 'Unlocking…' : 'Unlock vault'}
-          </button>
+          </motion.button>
         </form>
-      </div>
+      </motion.div>
     </div>
   )
 }

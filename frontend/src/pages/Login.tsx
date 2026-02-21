@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../hooks/useAuth'
 import { authApi, API_BASE } from '../api/client'
@@ -37,8 +38,14 @@ function LoginContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4">
-      <div className="w-full max-w-md text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4 relative">
+      <div className="vault-bg-gradient" aria-hidden />
+      <motion.div
+        className="w-full max-w-md text-center relative z-10"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+      >
         <h1 className="text-3xl font-semibold tracking-tight text-[var(--color-text)] mb-2">
           Secured String Matching
         </h1>
@@ -46,11 +53,16 @@ function LoginContent() {
           Search on encrypted data without revealing it.
         </p>
         {backendOk === false && (
-          <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+          <motion.div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             Backend not reachable. Start it: <code className="block mt-1 font-mono text-xs">uvicorn backend.app.main:app --reload --port 8000</code>
-          </div>
+          </motion.div>
         )}
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 shadow-xl">
+        <motion.div
+          className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 shadow-xl transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)]"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.05 }}
+        >
           {GOOGLE_CLIENT_ID ? (
             <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
               <div className="flex justify-center">
@@ -70,8 +82,8 @@ function LoginContent() {
               Add VITE_GOOGLE_CLIENT_ID to frontend .env and restart the dev server.
             </p>
           )}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </div>
   )
 }
