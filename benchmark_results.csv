@@ -1,0 +1,7 @@
+num_docs,doc_size_bytes,use_sqlite,upload_sec,search_latency_sec,index_size_bytes
+100,500,False,0.11,4.5e-05,12547
+100,500,True,0.1459,0.00048,217088
+1000,500,False,1.1625,7.5e-05,127747
+1000,500,True,0.9783,0.00406,2068480
+5000,500,False,5.0047,0.000522,671747
+5000,500,True,5.2755,0.023693,10268672

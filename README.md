@@ -4,16 +4,17 @@ A secure system that enables **string matching on encrypted data** while preserv
 
 ## Features
 
-- **Document encryption**: AES-256-GCM for document contents
-- **Searchable index**: Inverted index mapping (encrypted) keywords to document IDs; trapdoors via HMAC-SHA256
+- **Document encryption**: AES-256-GCM for document contents (random IV per document)
+- **Key management**: HKDF-derived key separation (K_enc, K_search, K_index); keys never stored on server; per-user key isolation
+- **Searchable index**: Inverted index mapping trapdoors to document IDs; constant-time comparison to prevent timing leaks
 - **Exact keyword search**: Generate a search token for a query; server returns matching document IDs without seeing the query or document contents
-- **Client/Server split**: Client holds the secret key; server stores encrypted data and index and performs matching
+- **Client/Server split**: Client holds the secret key; server stores only ciphertexts and the encrypted index
 
 ## Project structure
 
 ```
 gat/
-├── crypto/           # SSE primitives: key gen, encrypt/decrypt, trapdoor
+├── crypto/           # SSE: keys (HKDF), sse (AES-GCM, trapdoors), constant-time compare
 ├── client/           # Data owner: encrypt, build index, search token, decrypt
 ├── server/           # Untrusted server: store index + docs, match token → doc IDs
 ├── backend/          # Full-stack: FastAPI app, Google OAuth, REST API
@@ -142,11 +143,43 @@ Open **http://localhost:5173**. Sign in with Google, upload documents, search by
    - Backend: `GOOGLE_CLIENT_ID` (or `GAT_GOOGLE_CLIENT_ID`).
    - Frontend: `VITE_GOOGLE_CLIENT_ID` in `.env`.
 
-## Security notes
+## Security
 
-- **Confidentiality**: Document contents and keywords are encrypted or replaced by trapdoors.
-- **Query privacy**: The server sees only the search token, not the actual query string.
-- This implementation does **not** hide the **access pattern** (which documents matched a query); hiding access patterns requires additional techniques (e.g. ORAM) and is out of scope for this project.
+- **Key management**: A single master key is generated with `os.urandom`. HKDF derives three separate keys: K_enc (document encryption), K_search (trapdoor generation), K_index (index encoding). The server stores only data partitioned by key identifier (e.g. user id); no key material is ever stored on the server.
+- **Confidentiality**: Document contents are encrypted with AES-256-GCM; keywords are represented by trapdoors (HMAC-SHA256). The server never sees plaintext.
+- **Query privacy**: The server sees only the search token (trapdoor), not the query string.
+- **Timing**: Server-side trapdoor comparison uses constant-time equality to avoid timing side channels.
+- **Leakage**: Same keyword yields the same trapdoor (search-pattern leakage). Access pattern (which doc IDs are returned per query) is visible to the server. See [THREAT_MODEL.md](THREAT_MODEL.md) for the full adversary model, leakage profile, and mitigations.
+
+### Leakage summary (formal)
+
+- **What leaks**: Search pattern (same query → same token); access pattern (which doc IDs per query); response volume; ciphertext size.
+- **What does not leak**: Document plaintext; keyword plaintext; key material.
+- **Assumptions**: Key remains secret; server is honest-but-curious; no server-side plaintext processing.
+
+---
+
+## Advanced features (production upgrade)
+
+- **Forward-private SSE**: `upload_documents_forward_secure(keyword_counter, docs)` and `search_forward_secure(keyword_counter, query)`. Per-keyword counter; server cannot link past searches to future insertions.
+- **Padded response**: `search(query, pad_to=N)` returns padded, shuffled doc ID list; client filters to known doc IDs.
+- **Scalable index**: `SSEServer(storage_dir=..., use_sqlite_index=True)` uses SQLite for the index (O(1) insert; full scan for constant-time search). Default remains JSON.
+- **Substring search**: `upload_documents_substring_index(docs, n=3)` then `search_substring(query, n=3)`. Encrypted n-gram index; result = intersection of n-gram matches.
+- **Fuzzy search**: `upload_documents_phonetic_index(docs)` then `search_phonetic_candidates(query)` or `search_fuzzy(query, max_edit_distance=2)`. Soundex + client-side Levenshtein verification.
+- **Ranking**: `search_ranked(query, top_k=10)`. TF-IDF computed client-side after decryption; returns top-K doc IDs.
+- **Concurrency**: Server uses a lock around index and document updates to prevent race conditions.
+
+---
+
+## Benchmarking
+
+```bash
+python benchmark.py
+```
+
+Measures upload time, search latency, and index size for 100, 1000, and 5000 documents (JSON and SQLite backends). Results are written to `benchmark_results.csv`.
+
+---
 
 ## License
 
