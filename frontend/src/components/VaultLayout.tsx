@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useVault } from '../hooks/useVault'
+import LocateDecryptTools from './LocateDecryptTools'
 import Dashboard from '../pages/Dashboard'
 
 export default function VaultLayout() {
@@ -134,6 +135,11 @@ export default function VaultLayout() {
               </svg>
               Lock
             </button>
+          </div>
+
+          {/* Locate Encrypted File & Decrypt File Name (client-side vault tools) */}
+          <div id="locate-decrypt-tools">
+            <LocateDecryptTools />
           </div>
 
           <div id="documents">

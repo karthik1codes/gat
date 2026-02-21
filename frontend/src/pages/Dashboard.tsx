@@ -20,6 +20,8 @@ export default function Dashboard() {
   const [searchType, setSearchType] = useState<'keyword' | 'substring' | 'fuzzy' | 'ranked'>('keyword')
   const [topK, setTopK] = useState(20)
   const [searchTotal, setSearchTotal] = useState<number | null>(null)
+  const [lastUploaded, setLastUploaded] = useState<{ id: string; filename: string; encrypted_path: string }[]>([])
+  const [copiedPath, setCopiedPath] = useState<string | null>(null)
 
   const loadDocList = useCallback(async () => {
     setLoadingDocs(true)
@@ -64,16 +66,26 @@ export default function Dashboard() {
     if (!files?.length) return
     setUploading(true)
     setError(null)
+    setLastUploaded([])
     try {
-      await documentsApi.upload(Array.from(files))
+      const res = await documentsApi.upload(Array.from(files))
+      setLastUploaded(res.uploaded.map((u) => ({ id: u.id, filename: u.filename, encrypted_path: u.encrypted_path })))
       await loadDocList()
       refreshVault()
       e.target.value = ''
+      // Scroll to encrypted path section so user sees where files were stored
+      document.getElementById('locate-decrypt-tools')?.scrollIntoView({ behavior: 'smooth' })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
     } finally {
       setUploading(false)
     }
+  }
+
+  const copyEncryptedPath = (path: string) => {
+    navigator.clipboard.writeText(path)
+    setCopiedPath(path)
+    setTimeout(() => setCopiedPath(null), 2000)
   }
 
   const handleDelete = async (docId: string, e: React.MouseEvent) => {
@@ -160,6 +172,29 @@ export default function Dashboard() {
           />
           {uploading ? 'Uploading…' : 'Choose files'}
         </label>
+        {lastUploaded.length > 0 && (
+          <div className="mt-4 p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
+            <p className="text-sm font-medium text-[var(--color-text)] mb-2">Uploaded and encrypted — stored at:</p>
+            <ul className="space-y-2">
+              {lastUploaded.map((u) => (
+                <li key={u.id} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-[var(--color-muted)] truncate max-w-[140px]" title={u.filename}>{u.filename}</span>
+                  <code className="flex-1 min-w-0 truncate px-2 py-1 rounded bg-[var(--color-surface)] text-[var(--color-text)]" title={u.encrypted_path}>
+                    {u.encrypted_path}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => copyEncryptedPath(u.encrypted_path)}
+                    className="shrink-0 px-2 py-1 rounded bg-[var(--color-primary)] text-white text-xs font-medium"
+                  >
+                    {copiedPath === u.encrypted_path ? 'Copied' : 'Copy path'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-[var(--color-muted)] mt-2">Use &quot;Locate Encrypted File&quot; below to open this path for any document.</p>
+          </div>
+        )}
       </section>
 
       {/* Search */}

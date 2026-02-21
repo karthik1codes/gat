@@ -22,9 +22,32 @@ from ..config import (
 from ..database import get_db
 from ..models import User
 from ..rate_limit import check_rate_limit
+from ..config import USER_STORAGE_BASE
 from ..routes.auth import get_current_user_id
 from ..sse_service import get_or_create_sse_client
 from ..services.vault_service import get_vault
+
+DOC_METADATA_FILENAME = "doc_metadata.json"
+
+
+def _doc_metadata_path(user_id: str) -> Path:
+    return USER_STORAGE_BASE / user_id / DOC_METADATA_FILENAME
+
+
+def _load_doc_metadata(user_id: str) -> dict:
+    p = _doc_metadata_path(user_id)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_doc_metadata(user_id: str, data: dict) -> None:
+    p = _doc_metadata_path(user_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def require_vault_unlocked(user: User = Depends(get_current_user_id)) -> User:
@@ -125,7 +148,14 @@ async def upload_documents(
     client.upload_documents_phonetic_index(documents_to_upload)
     user.keyword_counter_json = json.dumps(keyword_counter)
     db.commit()
-    uploaded = [{"id": doc_id, "filename": fn} for doc_id, fn in filenames]
+    meta = _load_doc_metadata(user.id)
+    for doc_id, fn in filenames:
+        meta[doc_id] = fn
+    _save_doc_metadata(user.id, meta)
+    uploaded = [
+        {"id": doc_id, "filename": fn, "encrypted_path": f"vault/documents/{doc_id}"}
+        for doc_id, fn in filenames
+    ]
     return {"uploaded": uploaded, "count": len(uploaded)}
 
 
@@ -234,7 +264,32 @@ def delete_document(
     client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
     if not client._server.delete_document(doc_id):
         raise HTTPException(status_code=404, detail="Document not found")
+    meta = _load_doc_metadata(user.id)
+    meta.pop(doc_id, None)
+    _save_doc_metadata(user.id, meta)
     return {"deleted": doc_id}
+
+
+@router.get("/{doc_id}/encrypted-path")
+def get_encrypted_path(
+    doc_id: str,
+    user: User = Depends(require_vault_unlocked),
+):
+    """
+    Return the encrypted storage path for a document (for "Locate Encrypted File").
+    Path is logical (vault/documents/<doc_id>); original_filename is the name before upload.
+    """
+    client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
+    if client._server.get_document(doc_id) is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    meta = _load_doc_metadata(user.id)
+    original_filename = meta.get(doc_id) or doc_id
+    encrypted_path = f"vault/documents/{doc_id}"
+    return {
+        "doc_id": doc_id,
+        "encrypted_path": encrypted_path,
+        "original_filename": original_filename,
+    }
 
 
 @router.get("/{doc_id}/content")

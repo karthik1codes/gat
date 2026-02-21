@@ -54,7 +54,7 @@ export const documentsApi = {
   upload: (files: File[]) => {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))
-    return api<{ uploaded: { id: string; filename: string }[]; count: number }>('/api/documents/upload', {
+    return api<{ uploaded: { id: string; filename: string; encrypted_path: string }[]; count: number }>('/api/documents/upload', {
       method: 'POST',
       body: form,
     })
@@ -80,6 +80,10 @@ export const documentsApi = {
   delete: (docId: string) =>
     api<{ deleted: string }>(`/api/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
   getContent: (docId: string) => apiText(`/api/documents/${encodeURIComponent(docId)}/content`),
+  getEncryptedPath: (docId: string) =>
+    api<{ doc_id: string; encrypted_path: string; original_filename: string }>(
+      `/api/documents/${encodeURIComponent(docId)}/encrypted-path`
+    ),
 }
 
 export type VaultStatus = { state: 'LOCKED' | 'UNLOCKED'; initialized: boolean }
