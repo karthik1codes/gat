@@ -7,6 +7,7 @@ import VaultGate from './pages/VaultGate'
 import VaultLayout from './components/VaultLayout'
 import Dashboard from './pages/Dashboard'
 import PerformancePage from './pages/PerformancePage'
+import JotformAgent from './components/JotformAgent'
 
 const pageTransition = {
   initial: { opacity: 0, y: 10 },
@@ -39,7 +40,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
   if (!user) return <Navigate to="/login" replace />
-  return <>{children}</>
+  return (
+    <>
+      <JotformAgent />
+      {children}
+    </>
+  )
 }
 
 export default function App() {

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../hooks/useAuth'
 import { authApi, API_BASE } from '../api/client'
-import matrixRainBg from '../assets/Video_Audio_Removed_Successfully (1).gif'
+import MatrixRain from '../components/MatrixRain'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 
@@ -40,13 +40,8 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-black px-4 relative overflow-hidden">
-      {/* Matrix-style binary rain GIF background - exactly as in asset */}
-      <img
-        src={matrixRainBg}
-        alt=""
-        className="fixed inset-0 w-full h-full object-cover z-0"
-        aria-hidden
-      />
+      {/* Crisp canvas Matrix rain (sharp, no blur) */}
+      <MatrixRain />
       {/* Dark overlay so title and button stay readable */}
       <div className="fixed inset-0 z-[1] bg-black/50" aria-hidden />
       <motion.div

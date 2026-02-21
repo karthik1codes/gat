@@ -191,7 +191,12 @@ export default function Dashboard() {
         <LocateDecryptTools />
       </div>
       <div id="documents" className="space-y-10">
-      <motion.div variants={cardItem}>
+      {/* Single hoverable card: Dashboard intro + Judge Mode + Upload + Search */}
+      <motion.section
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
+        variants={cardItem}
+        whileHover={{ scale: 1.01 }}
+      >
         <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-1">Dashboard</h1>
         <p className="text-[var(--color-muted)] text-sm">
           Upload documents (encrypted). Search by keyword. Only you can decrypt.
@@ -280,20 +285,15 @@ export default function Dashboard() {
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
 
-      {error && (
-        <motion.div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-sm p-4" variants={cardItem}>
-          {error}
-        </motion.div>
-      )}
+        {error && (
+          <div className="mt-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-sm p-4">
+            {error}
+          </div>
+        )}
 
-      {/* Upload */}
-      <motion.section
-        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
-        variants={cardItem}
-        whileHover={{ scale: 1.01 }}
-      >
+        <div className="border-t border-[var(--color-border)] my-6" />
+
         <h2 className="text-lg font-medium text-[var(--color-text)] mb-3">Upload documents</h2>
         <p className="text-[var(--color-muted)] text-sm mb-4">
           Files are encrypted and indexed by keywords. Server never sees plaintext.
@@ -385,14 +385,9 @@ export default function Dashboard() {
             </details>
           </div>
         )}
-      </motion.section>
 
-      {/* Search */}
-      <motion.section
-        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
-        variants={cardItem}
-        whileHover={{ scale: 1.01 }}
-      >
+        <div className="border-t border-[var(--color-border)] my-6" />
+
         <h2 className="text-lg font-medium text-[var(--color-text)] mb-3">Search encrypted data</h2>
         <p className="text-[var(--color-muted)] text-sm mb-4">
           Enter a keyword. Matching is done on the server using a search token — the server never sees your query.
@@ -518,7 +513,7 @@ export default function Dashboard() {
         )}
       </motion.section>
 
-      {/* Document list */}
+      {/* Your documents - separate individual card */}
       <motion.section
         className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
         variants={cardItem}

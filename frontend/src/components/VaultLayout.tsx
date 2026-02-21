@@ -234,9 +234,15 @@ export default function VaultLayout() {
             <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">Open Existing Vault</h2>
             <form onSubmit={handleOpenSubmit} className="space-y-4">
               {vaultList.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Vault</label>
-                  <select value={openVaultId ?? ''} onChange={(e) => setOpenVaultId(e.target.value || null)} className="w-full px-4 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)]">
+                <div className="space-y-1">
+                  <label htmlFor="open-vault-select" className="block text-sm font-medium text-[var(--color-text)]">Vault</label>
+                  <select
+                    id="open-vault-select"
+                    value={openVaultId ?? ''}
+                    onChange={(e) => setOpenVaultId(e.target.value || null)}
+                    className="block w-full min-h-[42px] pl-4 pr-10 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] appearance-none cursor-pointer bg-no-repeat bg-[length:1.25rem] bg-[right_0.75rem_center]"
+                    style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")" }}
+                  >
                     <option value="">Select…</option>
                     {vaultList.map((v) => (
                       <option key={v.id} value={v.id}>{v.name}</option>
@@ -259,8 +265,12 @@ export default function VaultLayout() {
       )}
 
       {/* Main: header + vault message + dashboard */}
-      <motion.div className="flex-1 flex flex-col min-w-0 relative z-10" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-        <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 backdrop-blur shrink-0">
+      <motion.div className="flex-1 flex flex-col min-w-0 relative z-10 overflow-hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+        {/* Grid cover: subtle gradient overlay so grid is clearly visible */}
+        <div className="app-grid-cover" aria-hidden />
+        {/* Grid layer: visible line grid on dashboard, performance & scaling */}
+        <div className="app-grid-layer" aria-hidden />
+        <header className="relative z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 backdrop-blur shrink-0">
           <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-end">
             <div className="flex items-center gap-4">
               <span className="text-sm text-[var(--color-muted)] truncate max-w-[180px]">{user?.email}</span>
@@ -280,7 +290,7 @@ export default function VaultLayout() {
           </div>
         </header>
 
-        <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8">
+        <main className="relative z-10 flex-1 max-w-4xl w-full mx-auto px-4 py-8">
           <Outlet />
         </main>
       </motion.div>

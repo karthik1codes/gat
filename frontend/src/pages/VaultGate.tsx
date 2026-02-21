@@ -230,12 +230,14 @@ export default function VaultGate() {
           <p className="text-[var(--color-muted)] text-sm mb-6">Select a vault and enter its password.</p>
           <form onSubmit={handleUnlock} className="space-y-4">
             {vaultList.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Vault</label>
+              <div className="space-y-1">
+                <label htmlFor="vault-select" className="block text-sm font-medium text-[var(--color-text)]">Vault</label>
                 <select
+                  id="vault-select"
                   value={selectedVaultId ?? ''}
                   onChange={(e) => setSelectedVaultId(e.target.value || null)}
-                  className="w-full px-4 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)]"
+                  className="block w-full min-h-[42px] pl-4 pr-10 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] appearance-none cursor-pointer bg-no-repeat bg-[length:1.25rem] bg-[right_0.75rem_center]"
+                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")" }}
                 >
                   <option value="">Select a vault…</option>
                   {vaultList.map((v) => (
