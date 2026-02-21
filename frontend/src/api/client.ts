@@ -50,16 +50,54 @@ export const authApi = {
     api<{ id: string; email: string; name: string | null; picture: string | null }>('/api/auth/me'),
 }
 
+/** Upload debug metadata (Judge Mode). Safe fields only — no keys or plaintext. */
+export interface UploadDebugFile {
+  encrypted_filename: string
+  keyword_count: number
+  generated_tokens: string[]
+  encryption_algorithm: string
+  iv_length: number
+  ciphertext_size: number
+}
+
+export interface UploadResponse {
+  uploaded: { id: string; filename: string; encrypted_path: string }[]
+  count: number
+  debug?: { files: UploadDebugFile[] }
+}
+
+/** Search debug metadata (Judge Mode). Safe fields only. */
+export interface SearchDebugInfo {
+  search_token: string
+  matched_encrypted_doc_ids: string[]
+  encryption_algorithm: string
+  token_algorithm: string
+  index_lookup_performed: boolean
+  result_count: number
+}
+
+export interface SearchResponse {
+  query: string
+  document_ids: string[]
+  total?: number
+  debug?: SearchDebugInfo
+}
+
+export interface SecurityInfo {
+  encryption: string
+  token_generation: string
+  key_size_bits: number
+  leakage_profile: { search_pattern: boolean; access_pattern: boolean; content_leakage: boolean }
+}
+
 export const documentsApi = {
-  upload: (files: File[]) => {
+  upload: (files: File[], debug?: boolean) => {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))
-    return api<{ uploaded: { id: string; filename: string; encrypted_path: string }[]; count: number }>('/api/documents/upload', {
-      method: 'POST',
-      body: form,
-    })
+    const path = debug ? '/api/documents/upload?debug=true' : '/api/documents/upload'
+    return api<UploadResponse>(path, { method: 'POST', body: form })
   },
-  search: (q: string, opts?: { padTo?: number; searchType?: string; topK?: number; keywords?: string; mode?: 'and' | 'or'; skip?: number; limit?: number }) => {
+  search: (q: string, opts?: { padTo?: number; searchType?: string; topK?: number; keywords?: string; mode?: 'and' | 'or'; skip?: number; limit?: number; debug?: boolean }) => {
     const params = new URLSearchParams({ q })
     if (opts?.padTo != null && opts.padTo > 0) params.set('pad_to', String(opts.padTo))
     if (opts?.searchType) params.set('search_type', opts.searchType)
@@ -68,7 +106,8 @@ export const documentsApi = {
     if (opts?.mode) params.set('mode', opts.mode)
     if (opts?.skip != null) params.set('skip', String(opts.skip))
     if (opts?.limit != null) params.set('limit', String(opts.limit))
-    return api<{ query: string; document_ids: string[]; total?: number }>(`/api/documents/search?${params}`)
+    if (opts?.debug) params.set('debug', 'true')
+    return api<SearchResponse>(`/api/documents/search?${params}`)
   },
   list: (opts?: { skip?: number; limit?: number }) => {
     const params = new URLSearchParams()
@@ -88,6 +127,10 @@ export const documentsApi = {
     api<{ doc_id: string; encrypted_path: string; original_filename: string }>(
       `/api/documents/${encodeURIComponent(docId)}/encrypted-path`
     ),
+}
+
+export const securityInfoApi = {
+  get: () => api<SecurityInfo>('/api/security-info'),
 }
 
 export type VaultStatus = { state: 'LOCKED' | 'UNLOCKED'; initialized: boolean }

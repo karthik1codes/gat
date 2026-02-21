@@ -5,7 +5,7 @@ import re
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -69,6 +69,15 @@ class SearchResponse(BaseModel):
     total: int | None = None  # total count before pagination
 
 
+class SearchDebugInfo(BaseModel):
+    search_token: str
+    matched_encrypted_doc_ids: list[str]
+    encryption_algorithm: str = "AES-256-GCM"
+    token_algorithm: str = "HMAC-SHA256"
+    index_lookup_performed: bool = True
+    result_count: int
+
+
 def _get_keyword_counter(user: User) -> dict:
     """Load per-user keyword counter for forward-private SSE (persisted in DB)."""
     if not user.keyword_counter_json:
@@ -106,6 +115,7 @@ def _rank_by_tfidf(client, query: str, doc_ids: list, top_k: int) -> list:
 @router.post("/upload")
 async def upload_documents(
     files: list[UploadFile] = File(...),
+    debug: bool = Query(False, description="Include safe crypto trace metadata (Judge Mode)"),
     user: User = Depends(require_vault_unlocked),
     db: Session = Depends(get_db),
 ):
@@ -141,8 +151,11 @@ async def upload_documents(
         filenames.append((doc_id, f.filename))
     if not documents_to_upload:
         return {"uploaded": [], "count": 0}
+    debug_files: list[dict] = [] if debug else []
     # Forward-private SSE by default: index keys depend on per-keyword counter
-    client.upload_documents_forward_secure(keyword_counter, documents_to_upload)
+    client.upload_documents_forward_secure(
+        keyword_counter, documents_to_upload, debug_collector=debug_files if debug else None
+    )
     # Build substring (n-gram) and phonetic indexes for substring/fuzzy search
     client.upload_documents_substring_index(documents_to_upload, n=3)
     client.upload_documents_phonetic_index(documents_to_upload)
@@ -156,7 +169,10 @@ async def upload_documents(
         {"id": doc_id, "filename": fn, "encrypted_path": f"vault/documents/{doc_id}"}
         for doc_id, fn in filenames
     ]
-    return {"uploaded": uploaded, "count": len(uploaded)}
+    out: dict = {"uploaded": uploaded, "count": len(uploaded)}
+    if debug and debug_files:
+        out["debug"] = {"files": debug_files}
+    return out
 
 
 def _single_keyword_doc_ids(client, keyword_counter: dict, q: str, pad_to: int):
@@ -170,7 +186,36 @@ def _single_keyword_doc_ids(client, keyword_counter: dict, q: str, pad_to: int):
     return doc_ids_set
 
 
-@router.get("/search", response_model=SearchResponse)
+def _search_response(
+    query: str,
+    document_ids: list[str],
+    total: int | None,
+    client,
+    keywords_for_token: list[str],
+    debug: bool,
+):
+    """Build search response with optional debug metadata (no secrets)."""
+    out: dict = {
+        "query": query,
+        "document_ids": document_ids,
+        "total": total,
+    }
+    if debug and client is not None:
+        search_token = ""
+        if keywords_for_token:
+            search_token = client.get_trapdoor_hex(keywords_for_token[0])
+        out["debug"] = SearchDebugInfo(
+            search_token=search_token,
+            matched_encrypted_doc_ids=list(document_ids),
+            encryption_algorithm="AES-256-GCM",
+            token_algorithm="HMAC-SHA256",
+            index_lookup_performed=True,
+            result_count=len(document_ids),
+        ).model_dump()
+    return out
+
+
+@router.get("/search")
 def search(
     q: str,
     pad_to: int = 0,
@@ -180,6 +225,7 @@ def search(
     mode: str = "or",
     skip: int = 0,
     limit: int = 100,
+    debug: bool = Query(False, description="Include safe crypto trace metadata (Judge Mode)"),
     user: User = Depends(require_vault_unlocked),
 ):
     """
@@ -209,7 +255,7 @@ def search(
                 detail=f"Too many keywords (max {MAX_KEYWORDS_MULTI}).",
             )
         if not kw_list:
-            return SearchResponse(query=q or "", document_ids=[], total=None)
+            return _search_response(keywords.strip(), [], None, client, kw_list, debug)
         sets = []
         for w in kw_list:
             sets.append(_single_keyword_doc_ids(client, keyword_counter, w, pad_to))
@@ -219,10 +265,10 @@ def search(
             doc_ids = list(sets[0].union(*sets[1:]) if len(sets) > 1 else sets[0])
         total = len(doc_ids)
         doc_ids = doc_ids[skip : skip + limit]
-        return SearchResponse(query=keywords.strip(), document_ids=doc_ids, total=total)
+        return _search_response(keywords.strip(), doc_ids, total, client, kw_list, debug)
 
     if not q or not q.strip():
-        return SearchResponse(query=q or "", document_ids=[], total=None)
+        return _search_response(q or "", [], None, client, [], debug)
     q_clean = q.strip()
     if search_type == "substring":
         doc_ids = client.search_substring(q_clean, n=3, pad_to=pad_to)
@@ -238,7 +284,7 @@ def search(
         doc_ids = list(_single_keyword_doc_ids(client, keyword_counter, q_clean, pad_to))
     total = len(doc_ids)
     doc_ids = doc_ids[skip : skip + limit]
-    return SearchResponse(query=q_clean, document_ids=doc_ids, total=total)
+    return _search_response(q_clean, doc_ids, total, client, [q_clean], debug)
 
 
 @router.get("/")

@@ -1,5 +1,11 @@
 import { useState, useCallback, useEffect } from 'react'
-import { documentsApi } from '../api/client'
+import {
+  documentsApi,
+  securityInfoApi,
+  type UploadDebugFile,
+  type SearchDebugInfo,
+  type SecurityInfo,
+} from '../api/client'
 import { useVault } from '../hooks/useVault'
 
 export default function Dashboard() {
@@ -22,6 +28,11 @@ export default function Dashboard() {
   const [searchTotal, setSearchTotal] = useState<number | null>(null)
   const [lastUploaded, setLastUploaded] = useState<{ id: string; filename: string; encrypted_path: string }[]>([])
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
+  const [judgeMode, setJudgeMode] = useState(false)
+  const [uploadDebug, setUploadDebug] = useState<UploadDebugFile[] | null>(null)
+  const [searchDebug, setSearchDebug] = useState<SearchDebugInfo | null>(null)
+  const [securityInfo, setSecurityInfo] = useState<SecurityInfo | null>(null)
+  const [lastSearchQuery, setLastSearchQuery] = useState<string>('')
 
   const loadDocList = useCallback(async () => {
     setLoadingDocs(true)
@@ -40,20 +51,33 @@ export default function Dashboard() {
 
   useEffect(() => { loadDocList() }, [loadDocList])
 
+  useEffect(() => {
+    if (judgeMode) {
+      securityInfoApi.get().then(setSecurityInfo).catch(() => setSecurityInfo(null))
+    } else {
+      setSecurityInfo(null)
+    }
+  }, [judgeMode])
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!query.trim()) return
     setSearching(true)
     setError(null)
     setSearchResults(null)
+    setSearchDebug(null)
+    const q = query.trim()
+    setLastSearchQuery(q)
     try {
-      const res = await documentsApi.search(query.trim(), {
+      const res = await documentsApi.search(q, {
         padTo: padSearch ? 50 : undefined,
         searchType,
         topK: searchType === 'ranked' ? topK : undefined,
+        debug: judgeMode,
       })
       setSearchResults(res.document_ids)
       setSearchTotal(res.total ?? null)
+      if (res.debug) setSearchDebug(res.debug)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed')
     } finally {
@@ -67,13 +91,14 @@ export default function Dashboard() {
     setUploading(true)
     setError(null)
     setLastUploaded([])
+    setUploadDebug(null)
     try {
-      const res = await documentsApi.upload(Array.from(files))
+      const res = await documentsApi.upload(Array.from(files), judgeMode)
       setLastUploaded(res.uploaded.map((u) => ({ id: u.id, filename: u.filename, encrypted_path: u.encrypted_path })))
+      if (res.debug?.files) setUploadDebug(res.debug.files)
       await loadDocList()
       refreshVault()
       e.target.value = ''
-      // Scroll to encrypted path section so user sees where files were stored
       document.getElementById('locate-decrypt-tools')?.scrollIntoView({ behavior: 'smooth' })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
@@ -147,6 +172,45 @@ export default function Dashboard() {
             Privacy & threat model
           </a>
         </p>
+        <label className="flex items-center gap-2 mt-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={judgeMode}
+            onChange={(e) => setJudgeMode(e.target.checked)}
+            className="rounded border-[var(--color-border)]"
+          />
+          <span className="text-sm font-medium text-[var(--color-text)]">
+            Judge Mode (Cryptographic Trace)
+          </span>
+        </label>
+        <p className="text-[var(--color-muted)] text-xs mt-1 ml-6">
+          When on, upload and search include safe trace metadata so you can see client/server steps without exposing secrets.
+        </p>
+        {judgeMode && securityInfo && (
+          <div className="mt-4 p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Security metrics</h3>
+            <ul className="space-y-2 text-sm">
+              <li className="text-[var(--color-muted)]">Encryption: {securityInfo.encryption}</li>
+              <li className="text-[var(--color-muted)]">Token generation: {securityInfo.token_generation}</li>
+              <li className="text-[var(--color-muted)]">Key size: {securityInfo.key_size_bits} bits</li>
+            </ul>
+            <p className="text-sm font-medium text-[var(--color-text)] mt-3 mb-2">Leakage profile</p>
+            <ul className="space-y-1 text-sm">
+              <li className="flex items-center gap-2">
+                <span className={securityInfo.leakage_profile.search_pattern ? 'text-amber-400' : 'text-green-400'} aria-hidden>●</span>
+                Search pattern: {securityInfo.leakage_profile.search_pattern ? 'visible (token equality)' : 'hidden'}
+              </li>
+              <li className="flex items-center gap-2">
+                <span className={securityInfo.leakage_profile.access_pattern ? 'text-amber-400' : 'text-green-400'} aria-hidden>●</span>
+                Access pattern: {securityInfo.leakage_profile.access_pattern ? 'visible (which docs match)' : 'hidden'}
+              </li>
+              <li className="flex items-center gap-2">
+                <span className={securityInfo.leakage_profile.content_leakage ? 'text-red-400' : 'text-green-400'} aria-hidden>●</span>
+                Content leakage: {securityInfo.leakage_profile.content_leakage ? 'yes' : 'no'}
+              </li>
+            </ul>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -193,6 +257,38 @@ export default function Dashboard() {
               ))}
             </ul>
             <p className="text-xs text-[var(--color-muted)] mt-2">Use &quot;Locate Encrypted File&quot; below to open this path for any document.</p>
+          </div>
+        )}
+        {judgeMode && uploadDebug && uploadDebug.length > 0 && (
+          <div className="mt-4 p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
+            <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Upload encryption trace</h3>
+            {uploadDebug.map((f, i) => (
+              <div key={i} className="mb-4 last:mb-0 text-sm">
+                <p className="text-[var(--color-muted)] mb-1">Extracted keywords: {f.keyword_count}</p>
+                <p className="text-[var(--color-muted)] mb-1">Generated tokens: [{f.generated_tokens.length} token(s)]</p>
+                <p className="text-[var(--color-muted)] mb-1">Encryption: {f.encryption_algorithm}</p>
+                <p className="text-[var(--color-muted)] mb-1">IV length: {f.iv_length} bytes</p>
+                <p className="text-[var(--color-muted)]">Ciphertext size: {f.ciphertext_size} bytes</p>
+                {f.generated_tokens.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[var(--color-accent)]">Show token hashes</summary>
+                    <pre className="mt-1 text-xs break-all text-[var(--color-muted)]">{f.generated_tokens.join('\n')}</pre>
+                  </details>
+                )}
+              </div>
+            ))}
+            <details className="mt-3">
+              <summary className="cursor-pointer font-medium text-[var(--color-text)]">What server sees</summary>
+              <div className="mt-2 p-3 rounded bg-[var(--color-surface)] text-sm text-[var(--color-muted)]">
+                <p className="mb-2">Server sees only:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  {uploadDebug.map((f, i) => (
+                    <li key={i}>Encrypted filename / doc ID, ciphertext size ({f.ciphertext_size} bytes)</li>
+                  ))}
+                </ul>
+                <p className="mt-2 font-medium text-[var(--color-text)]">Server does NOT see: plaintext content, keyword text, secret key.</p>
+              </div>
+            </details>
           </div>
         )}
       </section>
@@ -280,6 +376,41 @@ export default function Dashboard() {
                 ))
               )}
             </ul>
+            {judgeMode && searchDebug && (
+              <div className="mt-4 p-4 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)]">
+                <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Search execution trace</h3>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="font-medium text-[var(--color-text)] mb-1">=== CLIENT SIDE ===</p>
+                    <p className="text-[var(--color-muted)]">Input keyword: {lastSearchQuery}</p>
+                    <p className="text-[var(--color-muted)]">Generated search token: <code className="break-all text-xs">{searchDebug.search_token}</code></p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-[var(--color-text)] mb-1">=== SERVER SIDE ===</p>
+                    <p className="text-[var(--color-muted)]">Received token → index lookup performed</p>
+                    <p className="text-[var(--color-muted)]">Matched encrypted IDs: [{searchDebug.matched_encrypted_doc_ids.length}]{' '}
+                      {searchDebug.matched_encrypted_doc_ids.length > 0 && (
+                        <details>
+                          <summary className="cursor-pointer text-[var(--color-accent)]">Show IDs</summary>
+                          <pre className="mt-1 text-xs break-all text-[var(--color-muted)]">{searchDebug.matched_encrypted_doc_ids.join('\n')}</pre>
+                        </details>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-[var(--color-text)] mb-1">=== CLIENT SIDE ===</p>
+                    <p className="text-[var(--color-muted)]">Encrypted document(s) received → decryption successful</p>
+                  </div>
+                </div>
+                <details className="mt-3">
+                  <summary className="cursor-pointer font-medium text-[var(--color-text)]">What server sees</summary>
+                  <div className="mt-2 p-3 rounded bg-[var(--color-surface)] text-sm text-[var(--color-muted)]">
+                    <p className="mb-2">Server sees only: search token, matched encrypted doc IDs, result count ({searchDebug.result_count}).</p>
+                    <p className="font-medium text-[var(--color-text)]">Server does NOT see: plaintext keyword, secret key, document contents.</p>
+                  </div>
+                </details>
+              </div>
+            )}
           </div>
         )}
       </section>

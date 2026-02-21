@@ -72,3 +72,21 @@ def threat_model():
     if not path.exists():
         raise HTTPException(status_code=404, detail="Not found")
     return PlainTextResponse(path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/security-info")
+def security_info():
+    """
+    Return safe cryptographic metadata for Judge Mode / transparency.
+    No auth required. Exposes only algorithm names and leakage profile (no secrets).
+    """
+    return {
+        "encryption": "AES-256-GCM",
+        "token_generation": "HMAC-SHA256",
+        "key_size_bits": 256,
+        "leakage_profile": {
+            "search_pattern": True,
+            "access_pattern": True,
+            "content_leakage": False,
+        },
+    }

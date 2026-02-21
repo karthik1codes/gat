@@ -5,7 +5,7 @@ Supports deterministic SSE (default) and forward-private SSE (optional).
 """
 
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from crypto import (
     generate_key,
@@ -97,6 +97,10 @@ class SSEClient:
             return None
         return decrypt_document(ct, self._key)
 
+    def get_trapdoor_hex(self, query: str) -> str:
+        """Return search token (trapdoor) as hex for debug/transparency. Safe to expose."""
+        return build_trapdoor(query.strip().lower(), self._key).hex()
+
     # -------------------------------------------------------------------------
     # Forward-private SSE: per-keyword counter; server cannot link searches to
     # future insertions. Caller must persist keyword_counter (e.g. to disk).
@@ -106,23 +110,37 @@ class SSEClient:
         self,
         keyword_counter: Dict[str, int],
         documents: List[Tuple[str, bytes]],
+        debug_collector: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """
         Encrypt and upload documents using forward-private index entries.
         keyword_counter is updated in place; persist it for future searches.
         Each (keyword, counter) gets a unique index key; counter increments per add.
+        If debug_collector is provided, append one dict per doc with safe debug info
+        (keyword_count, generated_tokens hex list, payload_size). No keys or plaintext.
         """
         index: Dict[str, List[str]] = {}
         for doc_id, plaintext in documents:
             payload, _ = encrypt_document(plaintext, self._key)
             self._server.upload_document(doc_id, payload)
             keywords = _extract_keywords(plaintext.decode("utf-8", errors="replace"))
+            token_hexes: List[str] = []
             for w in keywords:
                 c = keyword_counter.get(w, 0)
                 key = build_forward_secure_index_key(w, c, self._key)
                 key_hex = key.hex()
+                token_hexes.append(key_hex)
                 index.setdefault(key_hex, []).append(doc_id)
                 keyword_counter[w] = c + 1
+            if debug_collector is not None:
+                debug_collector.append({
+                    "encrypted_filename": doc_id,
+                    "keyword_count": len(keywords),
+                    "generated_tokens": token_hexes,
+                    "encryption_algorithm": "AES-256-GCM",
+                    "iv_length": 16,
+                    "ciphertext_size": len(payload),
+                })
         for k in index:
             index[k] = list(dict.fromkeys(index[k]))
         self._server.upload_index(index)
