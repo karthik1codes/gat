@@ -67,3 +67,40 @@ export async function decryptString(ciphertextBase64: string, keyBase64: string)
   )
   return new TextDecoder().decode(decrypted)
 }
+
+/** Payload shape from backend when filenames are stored encrypted (encrypted_filename, filename_iv, filename_tag). */
+export interface EncryptedFilenamePayload {
+  encrypted_filename: string
+  filename_iv: string
+  filename_tag: string
+}
+
+/** Decrypt filename from structured payload (server stores only encrypted; decryption client-side only). */
+export async function decryptFilenamePayload(
+  payload: EncryptedFilenamePayload,
+  keyBase64: string
+): Promise<string> {
+  const keyBytes = base64UrlToBytes(keyBase64)
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyBytes as BufferSource,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  )
+  const ciphertext = base64UrlToBytes(payload.encrypted_filename)
+  const iv = base64UrlToBytes(payload.filename_iv)
+  const tag = base64UrlToBytes(payload.filename_tag)
+  if (iv.length !== GCM_NONCE_BYTES || tag.length !== GCM_TAG_BYTES) {
+    throw new Error('Invalid filename payload')
+  }
+  const ciphertextWithTag = new Uint8Array(ciphertext.length + tag.length)
+  ciphertextWithTag.set(ciphertext, 0)
+  ciphertextWithTag.set(tag, ciphertext.length)
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: iv as BufferSource, tagLength: 128 },
+    key,
+    ciphertextWithTag
+  )
+  return new TextDecoder().decode(decrypted)
+}

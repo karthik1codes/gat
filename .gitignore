@@ -2,6 +2,10 @@
 backend/data/
 server_storage/
 
+# Generated / local-only
+benchmark_results.csv
+key.bin
+
 # Python
 __pycache__/
 *.py[cod]

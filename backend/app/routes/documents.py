@@ -27,6 +27,9 @@ from ..routes.auth import get_current_user_id
 from ..sse_service import get_or_create_sse_client
 from ..services.vault_service import get_vault
 
+# Filename encryption: server stores only encrypted form
+from crypto.filename_encryption import encrypt_filename_structured
+
 DOC_METADATA_FILENAME = "doc_metadata.json"
 
 
@@ -161,9 +164,14 @@ async def upload_documents(
     client.upload_documents_phonetic_index(documents_to_upload)
     user.keyword_counter_json = json.dumps(keyword_counter)
     db.commit()
+    vault = get_vault(user.id)
+    keys = vault.get_keys() if vault.is_unlocked() else None
     meta = _load_doc_metadata(user.id)
     for doc_id, fn in filenames:
-        meta[doc_id] = fn
+        if keys and len(keys.k_filename_enc) == 32:
+            meta[doc_id] = encrypt_filename_structured(fn, keys.k_filename_enc)
+        else:
+            meta[doc_id] = fn  # fallback: store plaintext only if vault keys unavailable (should not happen when unlocked)
     _save_doc_metadata(user.id, meta)
     uploaded = [
         {"id": doc_id, "filename": fn, "encrypted_path": f"vault/documents/{doc_id}"}
@@ -293,13 +301,19 @@ def list_documents(
     limit: int = 100,
     user: User = Depends(require_vault_unlocked),
 ):
-    """List document IDs with pagination (skip, limit). Includes original_filename for Locate Encrypted File."""
+    """List document IDs with pagination. Returns encrypted_filename_payload when set (client decrypts); else original_filename for legacy."""
     client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
     ids = client._server.list_document_ids()
     total = len(ids)
     ids = ids[skip : skip + limit]
     meta = _load_doc_metadata(user.id)
-    documents = [{"id": doc_id, "original_filename": meta.get(doc_id) or doc_id} for doc_id in ids]
+    documents = []
+    for doc_id in ids:
+        val = meta.get(doc_id)
+        if isinstance(val, dict) and "encrypted_filename" in val:
+            documents.append({"id": doc_id, "encrypted_filename_payload": val})
+        else:
+            documents.append({"id": doc_id, "original_filename": val if isinstance(val, str) else doc_id})
     return {"document_ids": ids, "total": total, "documents": documents}
 
 
@@ -325,18 +339,20 @@ def get_encrypted_path(
 ):
     """
     Return the encrypted storage path for a document (for "Locate Encrypted File").
-    Path is logical (vault/documents/<doc_id>); original_filename is the name before upload.
+    If filename is stored encrypted, returns encrypted_filename_payload (client decrypts); else original_filename (legacy).
     """
     client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
     if client._server.get_document(doc_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
     meta = _load_doc_metadata(user.id)
-    original_filename = meta.get(doc_id) or doc_id
+    val = meta.get(doc_id)
     encrypted_path = f"vault/documents/{doc_id}"
+    if isinstance(val, dict) and "encrypted_filename" in val:
+        return {"doc_id": doc_id, "encrypted_path": encrypted_path, "encrypted_filename_payload": val}
     return {
         "doc_id": doc_id,
         "encrypted_path": encrypted_path,
-        "original_filename": original_filename,
+        "original_filename": val if isinstance(val, str) else doc_id,
     }
 
 

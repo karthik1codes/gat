@@ -17,17 +17,22 @@ MASTER_KEY_SIZE = 32
 DERIVED_KEY_SIZE = 32
 HKDF_HASH = hashlib.sha256
 
-# Labels for HKDF-Expand; distinct to ensure independent keys.
-LABEL_K_ENC = b"sse.v1.k_enc"
-LABEL_K_SEARCH = b"sse.v1.k_search"
-LABEL_K_INDEX = b"sse.v1.k_index"
+# Labels for HKDF-Expand (RFC 5869); distinct to ensure independent keys.
+# Context strings align with key separation: file encryption, search token, index integrity.
+LABEL_K_FILE_ENC = b"file-encryption"
+LABEL_K_SEARCH = b"search-token"
+LABEL_K_INDEX_MAC = b"index-integrity"
+
+# Backward-compatible aliases
+LABEL_K_ENC = LABEL_K_FILE_ENC
+LABEL_K_INDEX = LABEL_K_INDEX_MAC
 
 
 class KeyBundle(NamedTuple):
     """Derived key set. Client holds this; server never sees any key material."""
-    k_enc: bytes      # Document encryption (AES-256-GCM)
-    k_search: bytes   # Search token (trapdoor) generation
-    k_index: bytes    # Index entry encoding (keyword -> index key)
+    k_enc: bytes         # Document encryption (AES-256-GCM) = K_file_enc
+    k_search: bytes      # Search token (trapdoor) generation
+    k_index_mac: bytes   # Index integrity (HMAC); was k_index, same slot for compatibility
 
 
 def _hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
@@ -64,15 +69,15 @@ def generate_master_key() -> bytes:
 
 def derive_key_bundle(master_key: bytes) -> KeyBundle:
     """
-    Derive K_enc, K_search, K_index from master key via HKDF.
+    Derive K_file_enc, K_search, K_index_mac from master key via HKDF.
     Each key is cryptographically independent; compromise of one does not reveal others.
     """
     if len(master_key) < MASTER_KEY_SIZE:
         raise ValueError("Master key must be at least 32 bytes")
     return KeyBundle(
-        k_enc=hkdf_derive(master_key, LABEL_K_ENC),
+        k_enc=hkdf_derive(master_key, LABEL_K_FILE_ENC),
         k_search=hkdf_derive(master_key, LABEL_K_SEARCH),
-        k_index=hkdf_derive(master_key, LABEL_K_INDEX),
+        k_index_mac=hkdf_derive(master_key, LABEL_K_INDEX_MAC),
     )
 
 

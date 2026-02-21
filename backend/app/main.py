@@ -20,7 +20,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import text
 
 from .database import engine, Base, get_db
-from .routes import auth, documents, vault
+from .routes import auth, documents, vault, benchmark, simulate
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -58,6 +58,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(vault.router)
+app.include_router(benchmark.router)
+app.include_router(simulate.router)
 
 
 @app.get("/api/health")

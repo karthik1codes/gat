@@ -14,15 +14,18 @@ from server import SSEServer
 
 from .config import USER_STORAGE_BASE
 from .auth_utils import encrypt_sse_key, decrypt_sse_key
+from .services.index_service import migrate_json_to_sqlite
 
 
 def get_or_create_sse_client(user_id: str, sse_key_encrypted: Optional[bytes]) -> tuple[SSEClient, Optional[bytes]]:
     """
     Return (SSEClient for this user, new_encrypted_key_if_created).
     If sse_key_encrypted is None, generate new key, encrypt, return client and encrypted key to store.
+    Migrates JSON index to SQLite if index.json exists (backward compatibility).
     """
     storage_dir = USER_STORAGE_BASE / user_id
     storage_dir.mkdir(parents=True, exist_ok=True)
+    migrate_json_to_sqlite(storage_dir)
     server = SSEServer(storage_dir=storage_dir, use_sqlite_index=True)
 
     if sse_key_encrypted:

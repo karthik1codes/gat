@@ -1,14 +1,14 @@
 """
 Filename encryption (Cryptomator-grade).
 
-- Encrypt filenames with AES-256-GCM using K_filename_enc.
-- Server stores only encrypted filename (e.g. base64); never sees original.
-- Unique nonce per encryption; result encoded for storage (base64url).
+- Encrypt filenames with AES-256-GCM using K_file_enc or K_filename_enc (32-byte key).
+- Server stores only encrypted_filename, filename_iv, filename_tag; never plaintext.
+- Unique IV per encryption; decryption client-side only when using client-held key.
 """
 
 import base64
 import os
-from typing import Optional
+from typing import Any, Dict
 
 try:
     from Cryptodome.Cipher import AES
@@ -19,6 +19,49 @@ except ImportError:
 
 GCM_NONCE_SIZE = 12
 GCM_TAG_SIZE = 16
+
+
+def encrypt_filename_structured(plaintext_name: str, key: bytes) -> Dict[str, str]:
+    """
+    Encrypt filename with AES-256-GCM; return dict for server storage.
+    key: 32-byte K_file_enc or K_filename_enc.
+    Returns: { "encrypted_filename": b64(ciphertext), "filename_iv": b64(iv), "filename_tag": b64(tag) }.
+    Server must NEVER store plaintext; decryption client-side only.
+    """
+    if len(key) != 32:
+        raise ValueError("Key must be 32 bytes")
+    name_bytes = plaintext_name.encode("utf-8")
+    iv = get_random_bytes(GCM_NONCE_SIZE)
+    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+    ciphertext, tag = cipher.encrypt_and_digest(name_bytes)
+    return {
+        "encrypted_filename": base64.urlsafe_b64encode(ciphertext).decode("ascii").rstrip("="),
+        "filename_iv": base64.urlsafe_b64encode(iv).decode("ascii").rstrip("="),
+        "filename_tag": base64.urlsafe_b64encode(tag).decode("ascii").rstrip("="),
+    }
+
+
+def _b64decode(s: str) -> bytes:
+    pad = 4 - len(s) % 4
+    if pad != 4:
+        s = s + "=" * pad
+    return base64.urlsafe_b64decode(s)
+
+
+def decrypt_filename_structured(payload: Dict[str, Any], key: bytes) -> str:
+    """Decrypt from stored { encrypted_filename, filename_iv, filename_tag }. Fails securely on error."""
+    if len(key) != 32:
+        raise ValueError("Key must be 32 bytes")
+    for k in ("encrypted_filename", "filename_iv", "filename_tag"):
+        if k not in payload or not payload[k]:
+            raise ValueError("Missing required field for decryption")
+    ciphertext = _b64decode(payload["encrypted_filename"])
+    iv = _b64decode(payload["filename_iv"])
+    tag = _b64decode(payload["filename_tag"])
+    if len(iv) != GCM_NONCE_SIZE or len(tag) != GCM_TAG_SIZE:
+        raise ValueError("Invalid IV or tag length")
+    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+    return cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8")
 
 
 def encrypt_filename(plaintext_name: str, k_filename_enc: bytes) -> str:

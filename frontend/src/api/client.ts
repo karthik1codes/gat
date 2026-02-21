@@ -50,6 +50,13 @@ export const authApi = {
     api<{ id: string; email: string; name: string | null; picture: string | null }>('/api/auth/me'),
 }
 
+/** Server may return encrypted filename payload (decrypt client-side with vault key). */
+export interface EncryptedFilenamePayload {
+  encrypted_filename: string
+  filename_iv: string
+  filename_tag: string
+}
+
 /** Upload debug metadata (Judge Mode). Safe fields only — no keys or plaintext. */
 export interface UploadDebugFile {
   encrypted_filename: string
@@ -117,16 +124,17 @@ export const documentsApi = {
     return api<{
       document_ids: string[]
       total: number
-      documents?: { id: string; original_filename: string }[]
+      documents?: { id: string; original_filename?: string; encrypted_filename_payload?: EncryptedFilenamePayload }[]
     }>(`/api/documents/${qs ? `?${qs}` : ''}`)
   },
   delete: (docId: string) =>
     api<{ deleted: string }>(`/api/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
   getContent: (docId: string) => apiText(`/api/documents/${encodeURIComponent(docId)}/content`),
   getEncryptedPath: (docId: string) =>
-    api<{ doc_id: string; encrypted_path: string; original_filename: string }>(
-      `/api/documents/${encodeURIComponent(docId)}/encrypted-path`
-    ),
+    api<
+      | { doc_id: string; encrypted_path: string; original_filename: string }
+      | { doc_id: string; encrypted_path: string; encrypted_filename_payload: EncryptedFilenamePayload }
+    >(`/api/documents/${encodeURIComponent(docId)}/encrypted-path`),
 }
 
 export const securityInfoApi = {

@@ -109,6 +109,7 @@ The server never sees plaintext documents, plaintext keywords, or the search que
 
 ## Full-stack web application
 
+
 The project includes a **web app** with Google OAuth, upload, search, and document view.
 
 ### Backend (FastAPI)
@@ -194,6 +195,84 @@ python benchmark.py
 ```
 
 Measures upload time, search latency, and index size for 100, 1000, and 5000 documents (JSON and SQLite backends). Results are written to `benchmark_results.csv`.
+
+---
+
+## Testing the changes
+
+### 1. Automated tests (unit + security)
+
+From the project root:
+
+```bash
+pip install -r requirements.txt
+python -m pytest tests/ -v
+```
+
+This runs:
+
+- **Judge Mode**: security-info endpoint, no secrets in responses, debug payload shape.
+- **Vault security**: KDF, vault lock/unlock, file/filename encryption roundtrip, index sign/verify.
+
+All tests should pass. No backend or frontend server is required.
+
+### 2. Backend API (manual)
+
+Start the backend:
+
+```bash
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Then (optional, no auth):
+
+- **Health**: `curl http://localhost:8000/api/health` → `{"status":"ok"}`.
+- **Security info**: `curl http://localhost:8000/api/security-info` → encryption/token algo, key size, leakage profile.
+
+With auth (after signing in via the frontend, copy the JWT from DevTools → Application → Local Storage, or use the frontend):
+
+- **Benchmark** (POST; requires auth): from the dashboard or  
+  `curl -X POST http://localhost:8000/api/benchmark/run -H "Authorization: Bearer YOUR_JWT"`  
+  → returns `benchmark_results` for 100, 1000, 5000 docs (upload time, token gen, search latency, index size).
+- **Simulate server view** (GET; requires vault unlocked):  
+  `curl "http://localhost:8000/api/simulate/server-view?q=invoice" -H "Authorization: Bearer YOUR_JWT"`  
+  → returns only safe metadata: `search_token`, `matched_doc_ids`, `ciphertext_size`, `index_size` (no plaintext, no keys).
+
+### 3. Full-stack (upload, search, list, filenames)
+
+1. **Start backend** (port 8000) and **frontend** (`cd frontend && npm run dev`, port 5173).
+2. **Sign in** with Google (ensure `VITE_GOOGLE_CLIENT_ID` and backend `GOOGLE_CLIENT_ID` are set).
+3. **Create vault** (first time): set a password and confirm.
+4. **Unlock vault** and stay on the dashboard.
+5. **Upload**: choose one or more `.txt`/`.md`/`.csv` files. Confirm “Uploaded and encrypted” and that the list updates.
+6. **Search**: type a word that appears in the uploaded files (e.g. “invoice”). Confirm results and that opening a document shows the correct decrypted content.
+7. **List**: “Your documents” should show the same doc IDs; filenames are stored encrypted (new uploads) or as legacy plaintext; API returns either `encrypted_filename_payload` or `original_filename`.
+8. **Judge Mode**: turn on “Judge Mode (Cryptographic Trace)”. Upload or search again; confirm the trace panels (client/server steps, security metrics, “What server sees”) and that no secret key or plaintext appears.
+
+### 4. Filename encryption
+
+- **New uploads**: With vault unlocked, filenames are encrypted before being stored; `doc_metadata.json` holds `encrypted_filename`, `filename_iv`, `filename_tag` (no plaintext).
+- **List/encrypted-path**: API may return `encrypted_filename_payload`; the frontend can decrypt with the vault client-string key to display the original filename.
+- **Legacy**: Old entries (plain string in metadata) still return `original_filename` for backward compatibility.
+
+### 5. Index migration (JSON → SQLite)
+
+- If a user already had `index.json`, the first request that creates their SSE client runs **migration**: data is copied into `index.db`, then `index.json` is renamed to `index.json.bak`.
+- **Check**: Before migration, `backend/data/user_storage/<user_id>/index.json` exists. After one authenticated request (e.g. list or search), `index.db` exists and `index.json.bak` is present; search results stay the same.
+
+### Quick checklist
+
+| Check | How |
+|-------|-----|
+| Unit tests pass | `python -m pytest tests/ -v` |
+| Upload works | Upload file in UI → see in “Your documents” |
+| Search works | Search a keyword → see matching docs, open and read content |
+| List works | “Your documents” and pagination load correctly |
+| Judge Mode | Toggle on → upload/search show trace; no secrets in UI/network |
+| Benchmark | Call `POST /api/benchmark/run` (auth) → JSON with timings and sizes |
+| Simulate | Call `GET /api/simulate/server-view?q=...` (auth + vault) → only safe metadata |
+| Filenames encrypted | New uploads → inspect `doc_metadata.json` (no plaintext filename) |
+| Migration | Old user with `index.json` → after one request, `index.db` + `index.json.bak` |
 
 ---
 
