@@ -1,14 +1,15 @@
 import { createContext, useContext, useCallback, useEffect, useState } from 'react'
-import { vaultApi, type VaultStatus, type VaultStats } from '../api/client'
+import { vaultApi, vaultsApi, type VaultStatus, type VaultStats, type VaultListItem } from '../api/client'
 
 type VaultContextValue = {
   status: VaultStatus | null
   stats: VaultStats | null
   loading: boolean
   refresh: () => Promise<void>
-  unlock: (password: string) => Promise<void>
+  unlock: (password: string, vaultId?: string) => Promise<void>
   lock: () => Promise<void>
-  createVault: (password: string) => Promise<void>
+  createVault: (name: string, password: string) => Promise<void>
+  listVaults: () => Promise<VaultListItem[]>
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null)
@@ -40,8 +41,8 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     refresh()
   }, [refresh])
 
-  const unlock = useCallback(async (password: string) => {
-    await vaultApi.unlock(password)
+  const unlock = useCallback(async (password: string, vaultId?: string) => {
+    await vaultApi.unlock(password, vaultId)
     await refresh()
   }, [refresh])
 
@@ -50,10 +51,14 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     await refresh()
   }, [refresh])
 
-  const createVault = useCallback(async (password: string) => {
-    await vaultApi.unlock(password) // first unlock creates vault (salt)
+  const createVault = useCallback(async (name: string, password: string) => {
+    await vaultsApi.create(name, password)
     await refresh()
   }, [refresh])
+
+  const listVaults = useCallback(async () => {
+    return vaultsApi.list()
+  }, [])
 
   return (
     <VaultContext.Provider
@@ -65,6 +70,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         unlock,
         lock,
         createVault,
+        listVaults,
       }}
     >
       {children}

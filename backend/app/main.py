@@ -20,7 +20,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import text
 
 from .database import engine, Base, get_db
-from .routes import auth, documents, vault, benchmark, simulate
+from .routes import auth, documents, vault, benchmark, simulate, performance
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -38,6 +38,30 @@ with engine.connect() as conn:
     if "vault_verifier" not in cols:
         conn.execute(text("ALTER TABLE users ADD COLUMN vault_verifier BLOB"))
         conn.commit()
+    for col, typ in (("last_upload_duration_ms", "REAL"), ("last_upload_doc_count", "INTEGER"), ("last_search_latency_ms", "REAL"), ("last_uploaded_doc_ids_json", "VARCHAR"), ("last_search_matched_doc_ids_json", "VARCHAR"), ("current_vault_id", "VARCHAR")):
+        if col not in cols:
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {typ}"))
+            conn.commit()
+
+# Migrate legacy single-vault users into Vault table (one-time)
+import shutil
+from .models import User, Vault
+from .config import USER_STORAGE_BASE
+from sqlalchemy.orm import Session
+with Session(engine) as session:
+    for u in session.query(User).filter(User.vault_salt.isnot(None), User.vault_verifier.isnot(None), User.current_vault_id.is_(None)):
+        import uuid
+        vid = str(uuid.uuid4())
+        session.add(Vault(id=vid, user_id=u.id, name="Default", salt=u.vault_salt, verifier=u.vault_verifier))
+        u.current_vault_id = vid
+        # Move existing user storage into vault folder
+        old_dir = USER_STORAGE_BASE / u.id
+        new_dir = USER_STORAGE_BASE / u.id / vid
+        if old_dir.exists() and not new_dir.exists():
+            new_dir.mkdir(parents=True, exist_ok=True)
+            for name in list(old_dir.iterdir()):
+                shutil.move(str(old_dir / name), str(new_dir / name.name))
+    session.commit()
 
 app = FastAPI(
     title="Secured String Matching API",
@@ -61,7 +85,9 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(vault.router)
+app.include_router(vault.router_vaults)
 app.include_router(benchmark.router)
+app.include_router(performance.router)
 app.include_router(simulate.router)
 
 

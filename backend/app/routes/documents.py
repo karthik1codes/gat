@@ -2,6 +2,7 @@
 import json
 import math
 import re
+import time
 import uuid
 from pathlib import Path
 
@@ -24,8 +25,8 @@ from ..models import User
 from ..rate_limit import check_rate_limit
 from ..config import USER_STORAGE_BASE
 from ..routes.auth import get_current_user_id
-from ..sse_service import get_or_create_sse_client
-from ..services.vault_service import get_vault
+from ..sse_service import get_sse_client_for_vault
+from ..services.vault_service import get_vault, get_storage_dir
 
 # Filename encryption: server stores only encrypted form
 from crypto.filename_encryption import encrypt_filename_structured
@@ -33,34 +34,47 @@ from crypto.filename_encryption import encrypt_filename_structured
 DOC_METADATA_FILENAME = "doc_metadata.json"
 
 
-def _doc_metadata_path(user_id: str) -> Path:
-    return USER_STORAGE_BASE / user_id / DOC_METADATA_FILENAME
+def _doc_metadata_path(user_id: str, vault_id: str) -> Path:
+    return get_storage_dir(user_id, vault_id) / DOC_METADATA_FILENAME
 
 
-def _load_doc_metadata(user_id: str) -> dict:
-    p = _doc_metadata_path(user_id)
+def _load_doc_metadata(user_id: str, vault_id: str) -> dict:
+    """Return { \"files\": { doc_id: name_or_payload }, \"keyword_counter\": {} }."""
+    p = _doc_metadata_path(user_id, vault_id)
     if not p.exists():
-        return {}
+        return {"files": {}, "keyword_counter": {}}
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        raw = json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return {}
+        return {"files": {}, "keyword_counter": {}}
+    if "files" in raw and "keyword_counter" in raw:
+        return raw
+    # Legacy flat: whole thing is files
+    return {"files": raw if isinstance(raw, dict) else {}, "keyword_counter": {}}
 
 
-def _save_doc_metadata(user_id: str, data: dict) -> None:
-    p = _doc_metadata_path(user_id)
+def _save_doc_metadata(user_id: str, vault_id: str, data: dict) -> None:
+    p = _doc_metadata_path(user_id, vault_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def require_vault_unlocked(user: User = Depends(get_current_user_id)) -> User:
-    """Require vault to be created and unlocked for document access."""
-    if user.vault_salt is None:
-        raise HTTPException(status_code=403, detail="Create a vault first to store documents.")
-    vault = get_vault(user.id)
+    """Require a vault to be selected and unlocked for document access."""
+    if not user.current_vault_id:
+        raise HTTPException(status_code=403, detail="Create or open a vault first to store documents.")
+    vault = get_vault(user.id, user.current_vault_id)
     if not vault.is_unlocked():
         raise HTTPException(status_code=403, detail="Vault is locked. Unlock to access documents.")
     return user
+
+
+def _get_sse_client(user: User):
+    """Return SSE client for current vault (requires require_vault_unlocked)."""
+    key = get_vault(user.id, user.current_vault_id).get_k_master_for_compat()
+    if not key:
+        raise HTTPException(status_code=403, detail="Vault keys not available.")
+    return get_sse_client_for_vault(user.id, user.current_vault_id, key)
 
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -81,14 +95,10 @@ class SearchDebugInfo(BaseModel):
     result_count: int
 
 
-def _get_keyword_counter(user: User) -> dict:
-    """Load per-user keyword counter for forward-private SSE (persisted in DB)."""
-    if not user.keyword_counter_json:
-        return {}
-    try:
-        return json.loads(user.keyword_counter_json)
-    except (json.JSONDecodeError, TypeError):
-        return {}
+def _get_keyword_counter(user: User, vault_id: str) -> dict:
+    """Load per-vault keyword counter for forward-private SSE (in vault doc_metadata)."""
+    meta = _load_doc_metadata(user.id, vault_id)
+    return meta.get("keyword_counter") or {}
 
 
 def _rank_by_tfidf(client, query: str, doc_ids: list, top_k: int) -> list:
@@ -125,8 +135,9 @@ async def upload_documents(
     check_rate_limit(
         user.id, "upload", RATE_LIMIT_UPLOAD_PER_MINUTE, RATE_LIMIT_WINDOW_SECONDS
     )
-    client, _ = get_or_create_sse_client(user.id, user.sse_key_encrypted)
-    keyword_counter = _get_keyword_counter(user)
+    client = _get_sse_client(user)
+    meta = _load_doc_metadata(user.id, user.current_vault_id)
+    keyword_counter = meta.get("keyword_counter") or {}
     documents_to_upload = []
     filenames = []
     for f in files:
@@ -155,6 +166,7 @@ async def upload_documents(
     if not documents_to_upload:
         return {"uploaded": [], "count": 0}
     debug_files: list[dict] = [] if debug else []
+    t0 = time.perf_counter()
     # Forward-private SSE by default: index keys depend on per-keyword counter
     client.upload_documents_forward_secure(
         keyword_counter, documents_to_upload, debug_collector=debug_files if debug else None
@@ -162,17 +174,22 @@ async def upload_documents(
     # Build substring (n-gram) and phonetic indexes for substring/fuzzy search
     client.upload_documents_substring_index(documents_to_upload, n=3)
     client.upload_documents_phonetic_index(documents_to_upload)
-    user.keyword_counter_json = json.dumps(keyword_counter)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    db_user = db.query(User).filter(User.id == user.id).first()
+    if db_user:
+        db_user.last_upload_duration_ms = round(elapsed_ms, 2)
+        db_user.last_upload_doc_count = len(documents_to_upload)
+        db_user.last_uploaded_doc_ids_json = json.dumps([doc_id for doc_id, _ in documents_to_upload])
     db.commit()
-    vault = get_vault(user.id)
+    vault = get_vault(user.id, user.current_vault_id)
     keys = vault.get_keys() if vault.is_unlocked() else None
-    meta = _load_doc_metadata(user.id)
+    meta["keyword_counter"] = keyword_counter
     for doc_id, fn in filenames:
         if keys and len(keys.k_filename_enc) == 32:
-            meta[doc_id] = encrypt_filename_structured(fn, keys.k_filename_enc)
+            meta.setdefault("files", {})[doc_id] = encrypt_filename_structured(fn, keys.k_filename_enc)
         else:
-            meta[doc_id] = fn  # fallback: store plaintext only if vault keys unavailable (should not happen when unlocked)
-    _save_doc_metadata(user.id, meta)
+            meta.setdefault("files", {})[doc_id] = fn
+    _save_doc_metadata(user.id, user.current_vault_id, meta)
     uploaded = [
         {"id": doc_id, "filename": fn, "encrypted_path": f"vault/documents/{doc_id}"}
         for doc_id, fn in filenames
@@ -192,6 +209,15 @@ def _single_keyword_doc_ids(client, keyword_counter: dict, q: str, pad_to: int):
         )
     doc_ids_set.update(client.search(q, pad_to=pad_to))
     return doc_ids_set
+
+
+def _record_search_metrics(db: Session, user_id: str, elapsed_ms: float, document_ids: list[str]) -> None:
+    """Store last search latency and matched doc ids for real performance metrics."""
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user:
+        db_user.last_search_latency_ms = round(elapsed_ms, 2)
+        db_user.last_search_matched_doc_ids_json = json.dumps(document_ids)
+        db.commit()
 
 
 def _search_response(
@@ -235,12 +261,14 @@ def search(
     limit: int = 100,
     debug: bool = Query(False, description="Include safe crypto trace metadata (Judge Mode)"),
     user: User = Depends(require_vault_unlocked),
+    db: Session = Depends(get_db),
 ):
     """
     Search. search_type: keyword, substring, fuzzy, ranked.
     For multi-keyword: set keywords=word1,word2 and mode=and|or (intersection or union).
     Pagination: skip, limit (default limit=100).
     """
+    t0 = time.perf_counter()
     check_rate_limit(
         user.id, "search", RATE_LIMIT_SEARCH_PER_MINUTE, RATE_LIMIT_WINDOW_SECONDS
     )
@@ -249,10 +277,10 @@ def search(
             status_code=400,
             detail=f"Search query too long (max {MAX_SEARCH_QUERY_LENGTH} characters).",
         )
-    client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
+    client = _get_sse_client(user)
     if pad_to > 0:
         client._known_doc_ids = set(client._server.list_document_ids())
-    keyword_counter = _get_keyword_counter(user)
+    keyword_counter = _get_keyword_counter(user, user.current_vault_id)
 
     # Multi-keyword (AND/OR) when keywords param is set
     if keywords and keywords.strip():
@@ -263,6 +291,7 @@ def search(
                 detail=f"Too many keywords (max {MAX_KEYWORDS_MULTI}).",
             )
         if not kw_list:
+            _record_search_metrics(db, user.id, (time.perf_counter() - t0) * 1000, [])
             return _search_response(keywords.strip(), [], None, client, kw_list, debug)
         sets = []
         for w in kw_list:
@@ -273,9 +302,11 @@ def search(
             doc_ids = list(sets[0].union(*sets[1:]) if len(sets) > 1 else sets[0])
         total = len(doc_ids)
         doc_ids = doc_ids[skip : skip + limit]
+        _record_search_metrics(db, user.id, (time.perf_counter() - t0) * 1000, doc_ids)
         return _search_response(keywords.strip(), doc_ids, total, client, kw_list, debug)
 
     if not q or not q.strip():
+        _record_search_metrics(db, user.id, (time.perf_counter() - t0) * 1000, [])
         return _search_response(q or "", [], None, client, [], debug)
     q_clean = q.strip()
     if search_type == "substring":
@@ -292,6 +323,7 @@ def search(
         doc_ids = list(_single_keyword_doc_ids(client, keyword_counter, q_clean, pad_to))
     total = len(doc_ids)
     doc_ids = doc_ids[skip : skip + limit]
+    _record_search_metrics(db, user.id, (time.perf_counter() - t0) * 1000, doc_ids)
     return _search_response(q_clean, doc_ids, total, client, [q_clean], debug)
 
 
@@ -302,14 +334,15 @@ def list_documents(
     user: User = Depends(require_vault_unlocked),
 ):
     """List document IDs with pagination. Returns encrypted_filename_payload when set (client decrypts); else original_filename for legacy."""
-    client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
+    client = _get_sse_client(user)
     ids = client._server.list_document_ids()
     total = len(ids)
     ids = ids[skip : skip + limit]
-    meta = _load_doc_metadata(user.id)
+    meta = _load_doc_metadata(user.id, user.current_vault_id)
+    files = meta.get("files") or {}
     documents = []
     for doc_id in ids:
-        val = meta.get(doc_id)
+        val = files.get(doc_id)
         if isinstance(val, dict) and "encrypted_filename" in val:
             documents.append({"id": doc_id, "encrypted_filename_payload": val})
         else:
@@ -323,12 +356,12 @@ def delete_document(
     user: User = Depends(require_vault_unlocked),
 ):
     """Remove a document and its index entries."""
-    client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
+    client = _get_sse_client(user)
     if not client._server.delete_document(doc_id):
         raise HTTPException(status_code=404, detail="Document not found")
-    meta = _load_doc_metadata(user.id)
-    meta.pop(doc_id, None)
-    _save_doc_metadata(user.id, meta)
+    meta = _load_doc_metadata(user.id, user.current_vault_id)
+    meta.setdefault("files", {}).pop(doc_id, None)
+    _save_doc_metadata(user.id, user.current_vault_id, meta)
     return {"deleted": doc_id}
 
 
@@ -341,11 +374,11 @@ def get_encrypted_path(
     Return the encrypted storage path for a document (for "Locate Encrypted File").
     If filename is stored encrypted, returns encrypted_filename_payload (client decrypts); else original_filename (legacy).
     """
-    client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
+    client = _get_sse_client(user)
     if client._server.get_document(doc_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    meta = _load_doc_metadata(user.id)
-    val = meta.get(doc_id)
+    meta = _load_doc_metadata(user.id, user.current_vault_id)
+    val = (meta.get("files") or {}).get(doc_id)
     encrypted_path = f"vault/documents/{doc_id}"
     if isinstance(val, dict) and "encrypted_filename" in val:
         return {"doc_id": doc_id, "encrypted_path": encrypted_path, "encrypted_filename_payload": val}
@@ -361,7 +394,7 @@ def get_document_content(
     doc_id: str,
     user: User = Depends(require_vault_unlocked),
 ):
-    client = get_or_create_sse_client(user.id, user.sse_key_encrypted)[0]
+    client = _get_sse_client(user)
     plain = client.retrieve_and_decrypt(doc_id)
     if plain is None:
         raise HTTPException(status_code=404, detail="Document not found")

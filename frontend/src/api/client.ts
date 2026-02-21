@@ -178,7 +178,37 @@ export const benchmarkApi = {
   run: () => api<BenchmarkResponse>('/api/benchmark/run', { method: 'POST' }),
 }
 
-export type VaultStatus = { state: 'LOCKED' | 'UNLOCKED'; initialized: boolean }
+/** Per-document performance row. */
+export interface RealPerformanceDocument {
+  id: string
+  index_share_kb: number
+  encryption_ms: number | null
+  matched_in_last_search: boolean
+}
+
+/** Real performance metrics from user's uploads and searches (no synthetic data). */
+export interface RealPerformanceMetrics {
+  document_count: number
+  index_size_bytes: number
+  index_size_kb: number
+  last_upload_duration_ms: number | null
+  last_upload_doc_count: number | null
+  last_search_latency_ms: number | null
+  has_search_result: boolean
+  documents: RealPerformanceDocument[]
+}
+
+export const performanceApi = {
+  getReal: () => api<RealPerformanceMetrics>('/api/performance/real'),
+}
+
+export type VaultStatus = {
+  state: 'LOCKED' | 'UNLOCKED'
+  initialized: boolean
+  current_vault_id?: string | null
+  current_vault_name?: string | null
+}
+export type VaultListItem = { id: string; name: string; created_at: string }
 export type VaultStats = {
   total_encrypted_files: number
   total_encrypted_size_bytes: number
@@ -190,13 +220,23 @@ export type VaultStats = {
   vault_state: string
 }
 
-export const vaultApi = {
-  status: () => api<VaultStatus>('/api/vault/status'),
-  unlock: (password: string) =>
-    api<{ state: string }>('/api/vault/unlock', {
+export const vaultsApi = {
+  list: () => api<VaultListItem[]>('/api/vaults'),
+  create: (name: string, password: string) =>
+    api<{ id: string; name: string; state: string }>('/api/vaults', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ name, password }),
+    }),
+}
+
+export const vaultApi = {
+  status: () => api<VaultStatus>('/api/vault/status'),
+  unlock: (password: string, vaultId?: string) =>
+    api<{ state: string; vault_id?: string; vault_name?: string }>('/api/vault/unlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, vault_id: vaultId ?? undefined }),
     }),
   lock: () =>
     api<{ state: string }>('/api/vault/lock', { method: 'POST' }),

@@ -4,6 +4,9 @@ import { AuthProvider, useAuth } from './hooks/useAuth'
 import { VaultProvider } from './hooks/useVault'
 import Login from './pages/Login'
 import VaultGate from './pages/VaultGate'
+import VaultLayout from './components/VaultLayout'
+import Dashboard from './pages/Dashboard'
+import PerformancePage from './pages/PerformancePage'
 
 const pageTransition = {
   initial: { opacity: 0, y: 10 },
@@ -64,7 +67,12 @@ export default function App() {
                 </ProtectedRoute>
               </PageTransition>
             }
-          />
+          >
+            <Route element={<VaultLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="performance" element={<PerformancePage />} />
+            </Route>
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AnimatePresence>

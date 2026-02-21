@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Outlet } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useVault } from '../hooks/useVault'
-import VaultLayout from '../components/VaultLayout'
+import type { VaultListItem } from '../api/client'
 
 function PasswordField({
   value,
@@ -46,20 +47,28 @@ function PasswordField({
 }
 
 /**
- * When vault is not initialized: show Create New Vault (password + confirm).
- * When vault is locked: show Unlock vault (password).
- * When vault is unlocked: show main app (VaultLayout + dashboard).
+ * When no vaults: show Create New Vault (name + password + confirm).
+ * When vaults exist but locked: show Create New Vault + Open Existing Vault (list, select, password).
+ * When vault unlocked: show main app (VaultLayout + dashboard).
  */
 export default function VaultGate() {
-  const { status, loading, createVault, unlock } = useVault()
+  const { status, loading, createVault, unlock, listVaults } = useVault()
+  const [vaultName, setVaultName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [unlockPassword, setUnlockPassword] = useState('')
+  const [vaultList, setVaultList] = useState<VaultListItem[]>([])
+  const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showUnlockPassword, setShowUnlockPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [mode, setMode] = useState<'choose' | 'create' | 'open'>('choose')
+
+  useEffect(() => {
+    if (status?.initialized) listVaults().then(setVaultList).catch(() => setVaultList([]))
+  }, [status?.initialized, listVaults])
 
   if (loading || !status) {
     return (
@@ -70,12 +79,17 @@ export default function VaultGate() {
   }
 
   if (status.initialized && status.state === 'UNLOCKED') {
-    return <VaultLayout />
+    return <Outlet />
   }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    const name = (vaultName || '').trim()
+    if (!name) {
+      setError('Vault name is required')
+      return
+    }
     if (password.length < 8) {
       setError('Password must be at least 8 characters')
       return
@@ -86,7 +100,7 @@ export default function VaultGate() {
     }
     setSubmitting(true)
     try {
-      await createVault(password)
+      await createVault(name, password)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create vault')
     } finally {
@@ -98,9 +112,14 @@ export default function VaultGate() {
     e.preventDefault()
     setError(null)
     if (!unlockPassword.trim()) return
+    const vaultId = selectedVaultId || undefined
+    if (vaultList.length > 0 && !vaultId) {
+      setError('Select a vault to open')
+      return
+    }
     setSubmitting(true)
     try {
-      await unlock(unlockPassword)
+      await unlock(unlockPassword, vaultId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid password')
     } finally {
@@ -108,6 +127,7 @@ export default function VaultGate() {
     }
   }
 
+  // No vaults yet: only Create New Vault
   if (!status.initialized) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4 relative">
@@ -115,9 +135,20 @@ export default function VaultGate() {
         <motion.div className="w-full max-w-md relative z-10" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }}>
           <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-2">Create New Vault</h1>
           <p className="text-[var(--color-muted)] text-sm mb-6">
-            Set a password to protect your encrypted documents. You will need this password to unlock the vault.
+            Set a name and password to protect your encrypted documents. You will need this password to unlock the vault.
           </p>
           <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Vault name</label>
+              <input
+                type="text"
+                value={vaultName}
+                onChange={(e) => setVaultName(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)]"
+                placeholder="e.g. Personal"
+                autoComplete="off"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Password</label>
               <PasswordField
@@ -150,31 +181,112 @@ export default function VaultGate() {
     )
   }
 
+  // Has vaults but locked: Choose Create New / Open Existing
+  if (mode === 'create') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4 relative">
+        <div className="vault-bg-gradient" aria-hidden />
+        <motion.div className="w-full max-w-md relative z-10" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }}>
+          <button type="button" onClick={() => setMode('choose')} className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] mb-4">← Back</button>
+          <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-2">Create New Vault</h1>
+          <p className="text-[var(--color-muted)] text-sm mb-6">Set a name and password for the new vault.</p>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Vault name</label>
+              <input
+                type="text"
+                value={vaultName}
+                onChange={(e) => setVaultName(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)]"
+                placeholder="e.g. Work"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Password</label>
+              <PasswordField value={password} onChange={setPassword} placeholder="At least 8 characters" autoComplete="new-password" showPassword={showPassword} onToggleShow={() => setShowPassword((v) => !v)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Confirm password</label>
+              <PasswordField value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm password" autoComplete="new-password" showPassword={showConfirmPassword} onToggleShow={() => setShowConfirmPassword((v) => !v)} />
+            </div>
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+            <motion.button type="submit" disabled={submitting} className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50 transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.35)]" whileHover={!submitting ? { scale: 1.02 } : undefined} whileTap={{ scale: 0.98 }}>
+              {submitting ? 'Creating…' : 'Create vault'}
+            </motion.button>
+          </form>
+        </motion.div>
+      </div>
+    )
+  }
+
+  if (mode === 'open') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4 relative">
+        <div className="vault-bg-gradient" aria-hidden />
+        <motion.div className="w-full max-w-md relative z-10" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }}>
+          <button type="button" onClick={() => setMode('choose')} className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] mb-4">← Back</button>
+          <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-2">Open Existing Vault</h1>
+          <p className="text-[var(--color-muted)] text-sm mb-6">Select a vault and enter its password.</p>
+          <form onSubmit={handleUnlock} className="space-y-4">
+            {vaultList.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Vault</label>
+                <select
+                  value={selectedVaultId ?? ''}
+                  onChange={(e) => setSelectedVaultId(e.target.value || null)}
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)]"
+                >
+                  <option value="">Select a vault…</option>
+                  {vaultList.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Password</label>
+              <PasswordField value={unlockPassword} onChange={setUnlockPassword} placeholder="Vault password" autoComplete="current-password" showPassword={showUnlockPassword} onToggleShow={() => setShowUnlockPassword((v) => !v)} />
+            </div>
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+            <motion.button type="submit" disabled={submitting} className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50 transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.35)]" whileHover={!submitting ? { scale: 1.02 } : undefined} whileTap={{ scale: 0.98 }}>
+              {submitting ? 'Unlocking…' : 'Open vault'}
+            </motion.button>
+          </form>
+        </motion.div>
+      </div>
+    )
+  }
+
+  // mode === 'choose': show Create New Vault / Open Existing Vault
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] px-4 relative">
       <div className="vault-bg-gradient" aria-hidden />
       <motion.div className="w-full max-w-md relative z-10" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }}>
-        <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-2">Unlock vault</h1>
-        <p className="text-[var(--color-muted)] text-sm mb-6">
-          Enter your vault password to access your documents.
-        </p>
-        <form onSubmit={handleUnlock} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Password</label>
-            <PasswordField
-              value={unlockPassword}
-              onChange={setUnlockPassword}
-              placeholder="Vault password"
-              autoComplete="current-password"
-              showPassword={showUnlockPassword}
-              onToggleShow={() => setShowUnlockPassword((v) => !v)}
-            />
-          </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-          <motion.button type="submit" disabled={submitting} className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium disabled:opacity-50 transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.35)]" whileHover={!submitting ? { scale: 1.02 } : undefined} whileTap={{ scale: 0.98 }}>
-            {submitting ? 'Unlocking…' : 'Unlock vault'}
+        <h1 className="text-2xl font-semibold text-[var(--color-text)] mb-2">Vault</h1>
+        <p className="text-[var(--color-muted)] text-sm mb-6">Create a new vault or open an existing one.</p>
+        <div className="space-y-3">
+          <motion.button
+            type="button"
+            onClick={() => setMode('create')}
+            className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <span className="text-xl">+</span>
+            <span>Create New Vault…</span>
           </motion.button>
-        </form>
+          <motion.button
+            type="button"
+            onClick={() => { setMode('open'); setSelectedVaultId(vaultList[0]?.id ?? null); }}
+            className="w-full flex items-center gap-3 py-3 px-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <svg className="w-5 h-5 text-[var(--color-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+            <span>Open Existing Vault…</span>
+          </motion.button>
+        </div>
       </motion.div>
     </div>
   )
