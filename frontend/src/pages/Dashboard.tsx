@@ -172,7 +172,12 @@ export default function Dashboard() {
 
   return (
     <motion.div className="space-y-14" initial="initial" animate="animate" variants={containerVariants}>
-      <div className="mb-8">
+      <motion.section
+        id="locate-decrypt-tools"
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)]"
+        variants={cardItem}
+        whileHover={{ scale: 1.01 }}
+      >
         <p className="text-[var(--color-muted)] mb-4">Your vault's contents are accessible here:</p>
         <motion.button
           type="button"
@@ -186,10 +191,8 @@ export default function Dashboard() {
           </svg>
           Reveal Drive
         </motion.button>
-      </div>
-      <div id="locate-decrypt-tools">
         <LocateDecryptTools />
-      </div>
+      </motion.section>
       <div id="documents" className="space-y-10">
       {/* Single hoverable card: Dashboard intro + Judge Mode + Upload + Search */}
       <motion.section
