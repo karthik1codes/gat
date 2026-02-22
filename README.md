@@ -150,6 +150,10 @@ npm run dev
 
 Open **http://localhost:5173**. Sign in with Google, upload documents, search by keyword, and open documents to view decrypted content.
 
+### Deploy to Vercel (frontend + backend)
+
+To deploy the full app (frontend and API) on [Vercel](https://vercel.com) without removing any functionality, see **[docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md)**. You’ll set environment variables (Google OAuth, secrets), connect the repo, and deploy; API and UI run in one project with `/api/*` handled by the backend.
+
 ### Google OAuth setup
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), create or select a project.

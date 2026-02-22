@@ -29,11 +29,15 @@ JWT_EXPIRE_DAYS = 7
 
 # DB
 DATABASE_URL = os.environ.get("GAT_DATABASE_URL", f"sqlite:///{ROOT_DIR / 'backend' / 'data' / 'gat.db'}")
-# Ensure data dir exists
-(ROOT_DIR / "backend" / "data").mkdir(parents=True, exist_ok=True)
-
-# Per-user storage base for SSE
-USER_STORAGE_BASE = ROOT_DIR / "backend" / "data" / "user_storage"
+# On Vercel: use /tmp (ephemeral) so we don't write to read-only filesystem
+if os.environ.get("VERCEL"):
+    _data_dir = Path("/tmp/gat_data")
+    _data_dir.mkdir(parents=True, exist_ok=True)
+    DATABASE_URL = os.environ.get("GAT_DATABASE_URL", f"sqlite:////tmp/gat_data/gat.db")
+    USER_STORAGE_BASE = Path("/tmp/gat_data/user_storage")
+else:
+    (ROOT_DIR / "backend" / "data").mkdir(parents=True, exist_ok=True)
+    USER_STORAGE_BASE = ROOT_DIR / "backend" / "data" / "user_storage"
 
 # Input validation
 MAX_UPLOAD_BYTES = int(os.environ.get("GAT_MAX_UPLOAD_BYTES", 5 * 1024 * 1024))  # 5 MiB

@@ -25,43 +25,46 @@ from .routes import auth, documents, vault, benchmark, simulate, performance
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-# Ensure User.keyword_counter_json exists (forward-private SSE)
-with engine.connect() as conn:
-    r = conn.execute(text("PRAGMA table_info(users)"))
-    cols = [row[1] for row in r]
-    if "keyword_counter_json" not in cols:
-        conn.execute(text("ALTER TABLE users ADD COLUMN keyword_counter_json VARCHAR"))
-        conn.commit()
-    if "vault_salt" not in cols:
-        conn.execute(text("ALTER TABLE users ADD COLUMN vault_salt BLOB"))
-        conn.commit()
-    if "vault_verifier" not in cols:
-        conn.execute(text("ALTER TABLE users ADD COLUMN vault_verifier BLOB"))
-        conn.commit()
-    for col, typ in (("last_upload_duration_ms", "REAL"), ("last_upload_doc_count", "INTEGER"), ("last_search_latency_ms", "REAL"), ("last_uploaded_doc_ids_json", "VARCHAR"), ("last_search_matched_doc_ids_json", "VARCHAR"), ("current_vault_id", "VARCHAR")):
-        if col not in cols:
-            conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {typ}"))
+# Ensure User columns exist (SQLite only; Postgres uses migrations)
+from .config import DATABASE_URL
+if "sqlite" in DATABASE_URL:
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(users)"))
+        cols = [row[1] for row in r]
+        if "keyword_counter_json" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN keyword_counter_json VARCHAR"))
             conn.commit()
+        if "vault_salt" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN vault_salt BLOB"))
+            conn.commit()
+        if "vault_verifier" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN vault_verifier BLOB"))
+            conn.commit()
+        for col, typ in (("last_upload_duration_ms", "REAL"), ("last_upload_doc_count", "INTEGER"), ("last_search_latency_ms", "REAL"), ("last_uploaded_doc_ids_json", "VARCHAR"), ("last_search_matched_doc_ids_json", "VARCHAR"), ("current_vault_id", "VARCHAR")):
+            if col not in cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {typ}"))
+                conn.commit()
 
-# Migrate legacy single-vault users into Vault table (one-time)
-import shutil
-from .models import User, Vault
-from .config import USER_STORAGE_BASE
-from sqlalchemy.orm import Session
-with Session(engine) as session:
-    for u in session.query(User).filter(User.vault_salt.isnot(None), User.vault_verifier.isnot(None), User.current_vault_id.is_(None)):
-        import uuid
-        vid = str(uuid.uuid4())
-        session.add(Vault(id=vid, user_id=u.id, name="Default", salt=u.vault_salt, verifier=u.vault_verifier))
-        u.current_vault_id = vid
-        # Move existing user storage into vault folder
-        old_dir = USER_STORAGE_BASE / u.id
-        new_dir = USER_STORAGE_BASE / u.id / vid
-        if old_dir.exists() and not new_dir.exists():
-            new_dir.mkdir(parents=True, exist_ok=True)
-            for name in list(old_dir.iterdir()):
-                shutil.move(str(old_dir / name), str(new_dir / name.name))
-    session.commit()
+# Migrate legacy single-vault users into Vault table (one-time, SQLite only)
+if "sqlite" in DATABASE_URL:
+    import shutil
+    from .models import User, Vault
+    from .config import USER_STORAGE_BASE
+    from sqlalchemy.orm import Session
+    with Session(engine) as session:
+        for u in session.query(User).filter(User.vault_salt.isnot(None), User.vault_verifier.isnot(None), User.current_vault_id.is_(None)):
+            import uuid
+            vid = str(uuid.uuid4())
+            session.add(Vault(id=vid, user_id=u.id, name="Default", salt=u.vault_salt, verifier=u.vault_verifier))
+            u.current_vault_id = vid
+            # Move existing user storage into vault folder
+            old_dir = USER_STORAGE_BASE / u.id
+            new_dir = USER_STORAGE_BASE / u.id / vid
+            if old_dir.exists() and not new_dir.exists():
+                new_dir.mkdir(parents=True, exist_ok=True)
+                for name in list(old_dir.iterdir()):
+                    shutil.move(str(old_dir / name), str(new_dir / name.name))
+        session.commit()
 
 app = FastAPI(
     title="Secured String Matching API",
@@ -69,14 +72,18 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# CORS: local dev + Vercel preview/production (same-origin when frontend and API share domain)
+import os as _os
+_cors_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_cors_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app" if _os.environ.get("VERCEL") else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

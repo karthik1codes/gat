@@ -12,7 +12,11 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from .config import DATABASE_URL
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# SQLite needs check_same_thread=False; Postgres and others do not
+_connect_args = {}
+if "sqlite" in DATABASE_URL:
+    _connect_args["check_same_thread"] = False
+engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
