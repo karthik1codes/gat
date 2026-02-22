@@ -50,10 +50,10 @@ function LoginContent() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
       >
-        <h1 className="text-3xl font-semibold tracking-tight text-[var(--color-text)] mb-2">
+        <h1 className="text-5xl font-semibold tracking-tight text-[var(--color-text)] mb-3">
           Secured String Matching
         </h1>
-        <p className="text-[var(--color-muted)] mb-8">
+        <p className="text-xl text-[var(--color-muted)] mb-8">
           Search on encrypted data without revealing it.
         </p>
         {backendOk === false && (
@@ -62,24 +62,22 @@ function LoginContent() {
           </motion.div>
         )}
         <motion.div
-          className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 shadow-xl transition-shadow duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)]"
+          className="flex justify-center"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.05 }}
         >
           {GOOGLE_CLIENT_ID ? (
             <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-              <div className="flex justify-center">
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={() => alert('Sign-in failed. In Google Cloud Console → Credentials → your OAuth client, add Authorized JavaScript origin: http://localhost:5173')}
-                  useOneTap={false}
-                  theme="filled_black"
-                  size="large"
-                  text="continue_with"
-                  shape="rectangular"
-                />
-              </div>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => alert('Sign-in failed. In Google Cloud Console → Credentials → your OAuth client, add Authorized JavaScript origin: http://localhost:5173')}
+                useOneTap={false}
+                theme="filled_black"
+                size="large"
+                text="continue_with"
+                shape="rectangular"
+              />
             </GoogleOAuthProvider>
           ) : (
             <p className="text-[var(--color-muted)] text-sm">
