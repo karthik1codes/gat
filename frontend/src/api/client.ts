@@ -244,4 +244,7 @@ export const vaultApi = {
   /** Key for client-side string encrypt/decrypt (Locate/Decrypt tools). Vault must be unlocked. */
   getClientStringKey: () =>
     api<{ key_base64: string }>('/api/vault/client-string-key'),
+  /** Run Cryptomator on the server machine (Windows only). */
+  revealDrive: () =>
+    api<{ ok: boolean }>('/api/vault/reveal-drive', { method: 'POST' }),
 }

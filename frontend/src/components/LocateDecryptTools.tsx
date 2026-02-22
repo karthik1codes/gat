@@ -31,16 +31,6 @@ export default function LocateDecryptTools() {
     return key_base64
   }, [])
 
-  // Step 1: User clicks "Locate Encrypted File" → open native "Choose a file" dialog
-  const openFilePicker = () => {
-    setError(null)
-    setChosenFiles([])
-    setSelectedFileName(null)
-    setEncryptedPath(null)
-    setLocateStep('choose')
-    fileInputRef.current?.click()
-  }
-
   // Step 2: User selected file(s) → show "Select File Inside Vault" modal
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -77,15 +67,6 @@ export default function LocateDecryptTools() {
     setSelectedFileName(null)
     setEncryptedPath(null)
     setError(null)
-  }
-
-  const openDecrypt = () => {
-    setDecryptInput('')
-    setDecryptResult(null)
-    setDecryptContent(null)
-    setMatchedDocId(null)
-    setError(null)
-    setDecryptOpen(true)
   }
 
   /** Resolve display filename for a document (original or decrypt payload) client-side. */
@@ -168,29 +149,6 @@ export default function LocateDecryptTools() {
         aria-hidden
         onChange={onFileSelected}
       />
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-        <motion.button
-          type="button"
-          onClick={openFilePicker}
-          title="Choose a file"
-          className="flex flex-col items-center justify-center text-center py-4 px-4 rounded-xl border-2 border-dashed border-[var(--color-border)] bg-[var(--color-bg)] transition-all duration-200 hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface)] hover:shadow-[0_4px_16px_rgba(139,92,246,0.12)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:ring-offset-2 focus:ring-offset-[var(--color-surface)]"
-          whileHover={{ y: -2 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <span className="text-sm font-mono text-[var(--color-muted)] mb-2 block">abc → 101010</span>
-          <span className="text-sm font-semibold text-[var(--color-text)]">Locate Encrypted File</span>
-        </motion.button>
-        <motion.button
-          type="button"
-          onClick={openDecrypt}
-          className="flex flex-col items-center justify-center text-center py-4 px-4 rounded-xl border-2 border-dashed border-[var(--color-border)] bg-[var(--color-bg)] transition-all duration-200 hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface)] hover:shadow-[0_4px_16px_rgba(139,92,246,0.12)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:ring-offset-2 focus:ring-offset-[var(--color-surface)]"
-          whileHover={{ y: -2 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <span className="text-sm font-mono text-[var(--color-muted)] mb-2 block">101010 → abc</span>
-          <span className="text-sm font-semibold text-[var(--color-text)]">Decrypt File Name</span>
-        </motion.button>
-      </div>
 
       {/* Step 2 & 4: "Select File Inside Vault" modal — file list, File name, Open/Cancel → then Encrypted path */}
       {showSelectFileModal && (

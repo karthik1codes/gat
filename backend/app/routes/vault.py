@@ -4,6 +4,8 @@ Keys only in memory; never stored in plaintext on server.
 Multi-vault: each vault has id, name, salt, verifier; user has current_vault_id.
 """
 
+import sys
+import subprocess
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -185,3 +187,23 @@ def vault_client_string_key(user: User = Depends(get_current_user_id), db: Sessi
         raise HTTPException(status_code=403, detail="Vault keys not available.")
     import base64
     return {"key_base64": base64.urlsafe_b64encode(keys.k_filename_enc).decode("ascii").rstrip("=")}
+
+
+CRYPTOMATOR_EXE = r"C:\Program Files\Cryptomator\Cryptomator.exe"
+
+
+@router.post("/reveal-drive")
+def reveal_drive(user: User = Depends(get_current_user_id)):
+    """
+    Start Cryptomator on the server machine (e.g. run exe in background).
+    Only the fixed path is used; safe to call when backend runs locally.
+    """
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="Reveal drive is only supported on Windows.")
+    try:
+        subprocess.Popen([CRYPTOMATOR_EXE])
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Cryptomator not found at default path.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True}

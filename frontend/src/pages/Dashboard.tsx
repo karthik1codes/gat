@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   documentsApi,
   securityInfoApi,
+  vaultApi,
   type UploadDebugFile,
   type SearchDebugInfo,
   type SecurityInfo,
@@ -178,7 +179,22 @@ export default function Dashboard() {
         variants={cardItem}
         whileHover={{ scale: 1.01 }}
       >
-        <p className="text-[var(--color-muted)] mb-4">Your vault's contents are accessible here:</p>
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <p className="text-[var(--color-muted)]">Your vault's contents are accessible here:</p>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await vaultApi.revealDrive()
+              } catch (e) {
+                alert(e instanceof Error ? e.message : 'Failed to start Cryptomator')
+              }
+            }}
+            className="shrink-0 px-4 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] text-base font-medium transition-colors hover:bg-[var(--color-surface)] hover:border-[var(--color-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:ring-offset-2 focus:ring-offset-[var(--color-surface)]"
+          >
+            Reveal drive
+          </button>
+        </div>
         <LocateDecryptTools />
       </motion.section>
       <div id="documents" className="space-y-10">
@@ -277,7 +293,7 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
 
-        {error && (
+        {error && !error.includes('Vault is locked') && (
           <div className="mt-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-sm p-4">
             {error}
           </div>
