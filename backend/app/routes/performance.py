@@ -48,20 +48,22 @@ def real_performance_metrics(
     last_matched_ids = _parse_json_ids(db_user.last_search_matched_doc_ids_json) if db_user else []
 
     doc_ids = []
+    index_bytes_per_doc = {}
     try:
         client = _get_sse_client(user)
         doc_ids = list(client._server.list_document_ids())
+        index_bytes_per_doc = client._server.get_index_bytes_per_doc()
     except Exception:
         pass
 
-    # Per-document: index share (total / n), encryption approx (from last upload batch), matched in last search
-    n = len(doc_ids) or 1
-    index_share_kb = round(index_size_bytes / 1024 / n, 2) if doc_ids else 0
+    # Per-document: actual index bytes per doc (from backend), encryption approx (from last upload batch), matched in last search
     encryption_per_doc_ms = round(last_upload_ms / last_upload_count, 2) if (last_upload_ms is not None and last_upload_count) else None
 
     documents = []
     for doc_id in doc_ids:
         in_last_upload = doc_id in last_uploaded_ids
+        doc_index_bytes = index_bytes_per_doc.get(doc_id, 0)
+        index_share_kb = round(doc_index_bytes / 1024, 2)
         documents.append({
             "id": doc_id,
             "index_share_kb": index_share_kb,

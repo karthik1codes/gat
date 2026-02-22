@@ -138,6 +138,11 @@ class SSEServer:
         """Return all stored document IDs (for debugging)."""
         return list(self._documents.keys())
 
+    def get_index_bytes_per_doc(self) -> Dict[str, int]:
+        """Return approximate index bytes per doc_id (for per-document metrics)."""
+        with self._lock:
+            return self._backend.get_index_bytes_per_doc()
+
     def close(self) -> None:
         """Release resources (e.g. SQLite connection)."""
         self._backend.close()

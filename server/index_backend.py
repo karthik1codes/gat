@@ -29,6 +29,10 @@ class IndexBackend:
         """Remove a document from the index (all keys that reference it)."""
         raise NotImplementedError
 
+    def get_index_bytes_per_doc(self) -> Dict[str, int]:
+        """Return approximate index bytes per doc_id (for per-document metrics)."""
+        raise NotImplementedError
+
     def close(self) -> None:
         """Release resources."""
         pass
@@ -74,6 +78,19 @@ class JsonIndexBackend(IndexBackend):
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._path, "w", encoding="utf-8") as f:
             json.dump(self._index, f, indent=2)
+
+    def get_index_bytes_per_doc(self) -> Dict[str, int]:
+        """Approximate bytes per doc: each (key, doc_ids) entry size split by doc."""
+        out: Dict[str, int] = {}
+        for key_hex, doc_ids in self._index.items():
+            if not doc_ids:
+                continue
+            # Entry size: key + doc ids; split equally among docs in this entry
+            entry_size = len(key_hex.encode("utf-8")) + sum(len(d.encode("utf-8")) for d in doc_ids) + 2 * len(doc_ids)
+            per_doc = entry_size // len(doc_ids)
+            for doc_id in doc_ids:
+                out[doc_id] = out.get(doc_id, 0) + per_doc
+        return out
 
 
 class SqliteIndexBackend(IndexBackend):
@@ -129,6 +146,13 @@ class SqliteIndexBackend(IndexBackend):
     def remove_doc_id(self, doc_id: str) -> None:
         self._conn.execute("DELETE FROM index_entries WHERE doc_id = ?", (doc_id,))
         self._conn.commit()
+
+    def get_index_bytes_per_doc(self) -> Dict[str, int]:
+        """Bytes per doc: sum of (key_hex + doc_id) length for each row (proxy for index share)."""
+        cur = self._conn.execute(
+            "SELECT doc_id, SUM(LENGTH(key_hex) + LENGTH(doc_id)) AS bytes FROM index_entries GROUP BY doc_id"
+        )
+        return dict(cur.fetchall())
 
     def close(self) -> None:
         self._conn.close()

@@ -1,13 +1,13 @@
 /**
  * Locate Encrypted File & Decrypt File Name — client-side only.
  * Step-by-step flow to match reference: Choose a file → Select File Inside Vault → Open → Encrypted path.
- * No dependency on SSE or document upload.
+ * Decrypt File Name: paste encrypted string → decrypt → string-match to vault document → load and show content.
  */
 
 import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { vaultApi } from '../api/client'
-import { encryptString, decryptString } from '../lib/clientStringCrypto'
+import { vaultApi, documentsApi } from '../api/client'
+import { encryptString, decryptString, decryptFilenamePayload, type EncryptedFilenamePayload } from '../lib/clientStringCrypto'
 
 type LocateStep = 'choose' | 'select' | 'result'
 
@@ -20,6 +20,8 @@ export default function LocateDecryptTools() {
   const [decryptOpen, setDecryptOpen] = useState(false)
   const [decryptInput, setDecryptInput] = useState('')
   const [decryptResult, setDecryptResult] = useState<string | null>(null)
+  const [decryptContent, setDecryptContent] = useState<string | null>(null)
+  const [matchedDocId, setMatchedDocId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
@@ -80,22 +82,69 @@ export default function LocateDecryptTools() {
   const openDecrypt = () => {
     setDecryptInput('')
     setDecryptResult(null)
+    setDecryptContent(null)
+    setMatchedDocId(null)
     setError(null)
     setDecryptOpen(true)
   }
+
+  /** Resolve display filename for a document (original or decrypt payload) client-side. */
+  const getDocumentDisplayName = useCallback(
+    async (
+      doc: { id: string; original_filename?: string; encrypted_filename_payload?: EncryptedFilenamePayload },
+      key: string
+    ): Promise<string> => {
+      if (doc.original_filename) return doc.original_filename
+      if (doc.encrypted_filename_payload) {
+        try {
+          return await decryptFilenamePayload(doc.encrypted_filename_payload, key)
+        } catch {
+          return doc.id
+        }
+      }
+      return doc.id
+    },
+    []
+  )
 
   const handleDecrypt = async () => {
     const text = decryptInput.trim()
     if (!text) return
     setError(null)
     setDecryptResult(null)
+    setDecryptContent(null)
+    setMatchedDocId(null)
     setLoading(true)
     try {
       const key = await getKey()
-      const decrypted = await decryptString(text, key)
-      setDecryptResult(decrypted)
+      const decryptedName = await decryptString(text, key)
+      setDecryptResult(decryptedName)
+
+      // String matching: find document in vault whose filename matches (client-side only)
+      const { document_ids, documents } = await documentsApi.list({ limit: 500 })
+      const list = documents ?? document_ids.map((id) => ({ id }))
+      let matchedId: string | null = null
+      const target = decryptedName.trim().toLowerCase()
+      for (const doc of list) {
+        const name = (await getDocumentDisplayName(doc, key)).trim().toLowerCase()
+        if (name === target) {
+          matchedId = doc.id
+          break
+        }
+      }
+
+      if (matchedId) {
+        setMatchedDocId(matchedId)
+        const content = await documentsApi.getContent(matchedId)
+        setDecryptContent(content)
+      } else {
+        setDecryptContent(null)
+        setMatchedDocId(null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Decryption failed. Is the vault unlocked? Is the input valid?')
+      setDecryptContent(null)
+      setMatchedDocId(null)
     } finally {
       setLoading(false)
     }
@@ -255,20 +304,32 @@ export default function LocateDecryptTools() {
             />
             {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
             {decryptResult !== null && (
-              <div className="space-y-2 mb-4">
-                <label className="block text-xs font-medium text-[var(--color-muted)]">Original:</label>
-                <div className="flex gap-2 items-center">
-                  <code className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg)] text-sm text-[var(--color-text)] border border-[var(--color-border)]">
-                    {decryptResult}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(decryptResult, 'decrypt')}
-                    className="shrink-0 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium"
-                  >
-                    {copied === 'decrypt' ? 'Copied' : 'Copy'}
-                  </button>
+              <div className="space-y-3 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-muted)]">Original file name:</label>
+                  <div className="flex gap-2 items-center mt-1">
+                    <code className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-bg)] text-sm text-[var(--color-text)] border border-[var(--color-border)]">
+                      {decryptResult}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(decryptResult, 'decrypt')}
+                      className="shrink-0 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium"
+                    >
+                      {copied === 'decrypt' ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
                 </div>
+                {matchedDocId ? (
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--color-muted)] mb-1">Document content (matched in vault):</label>
+                    <pre className="px-3 py-3 rounded-lg bg-[var(--color-bg)] text-sm text-[var(--color-text)] border border-[var(--color-border)] max-h-[280px] overflow-auto whitespace-pre-wrap break-words font-sans">
+                      {decryptContent ?? 'Loading…'}
+                    </pre>
+                  </div>
+                ) : decryptResult !== null && !loading && (
+                  <p className="text-sm text-[var(--color-muted)]">No document in this vault matches that file name.</p>
+                )}
               </div>
             )}
             <div className="flex justify-end gap-2 mt-4">
