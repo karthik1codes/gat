@@ -279,7 +279,11 @@ With auth (after signing in via the frontend, copy the JWT from DevTools → App
 | Migration | Old user with `index.json` → after one request, `index.db` + `index.json.bak` |
 
 ---
-
+### Team Name
+ciphers_2.0
+### Team Members
+Shashank VA
+Karthik M
 ## License
 
 MIT (see LICENSE).
