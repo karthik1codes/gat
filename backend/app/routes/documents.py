@@ -187,11 +187,11 @@ async def upload_documents(
                 status_code=400,
                 detail=f"Upload failed: file type not allowed. Allowed: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}.",
             )
-            if ext == ".pdf":
-                try:
-                    content = _pdf_to_text(content)
-                except ValueError as e:
-                    raise HTTPException(status_code=400, detail=str(e))  # skip PDFs with no extractable text
+        if ext == ".pdf":
+            try:
+                content = _pdf_to_text(content)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
         base = re.sub(r"[^\w\-.]", "_", f.filename.strip())[:100]
         if not base:
             base = "doc"

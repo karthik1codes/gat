@@ -179,18 +179,6 @@ export default function Dashboard() {
         whileHover={{ scale: 1.01 }}
       >
         <p className="text-[var(--color-muted)] mb-4">Your vault's contents are accessible here:</p>
-        <motion.button
-          type="button"
-          onClick={() => document.getElementById('documents')?.scrollIntoView({ behavior: 'smooth' })}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.35)]"
-          whileHover={btnHover}
-          whileTap={btnTap}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-          </svg>
-          Reveal Drive
-        </motion.button>
         <LocateDecryptTools />
       </motion.section>
       <div id="documents" className="space-y-10">
