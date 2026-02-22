@@ -162,7 +162,7 @@ export default function PerformancePage() {
                         <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
                         <Tooltip
                           contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}
-                          formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [`${value} KB`, props.payload.fullName]}
+                          formatter={(value, _name, props) => [`${Number(value ?? 0)} KB`, (props?.payload as { fullName: string })?.fullName ?? '']}
                         />
                         <Bar dataKey="value" fill={CHART_COLOR} radius={[0, 4, 4, 0]} minPointSize={8} />
                       </BarChart>
@@ -193,9 +193,9 @@ export default function PerformancePage() {
                           <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
                           <Tooltip
                             contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}
-                            formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [
-                              `${Number(value).toFixed(2)} ms`,
-                              props.payload.fullName,
+                            formatter={(value, _name, props) => [
+                              `${Number(value ?? 0).toFixed(2)} ms`,
+                              (props?.payload as { fullName: string })?.fullName ?? '',
                             ]}
                           />
                           <Bar dataKey="value" fill={CHART_COLOR} radius={[0, 4, 4, 0]} minPointSize={8} />
@@ -234,9 +234,9 @@ export default function PerformancePage() {
                           <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
                           <Tooltip
                             contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}
-                            formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [
-                              `${value.toFixed(2)} ms`,
-                              props.payload.fullName,
+                            formatter={(value, _name, props) => [
+                              `${Number(value ?? 0).toFixed(2)} ms`,
+                              (props?.payload as { fullName: string })?.fullName ?? '',
                             ]}
                           />
                           <Bar dataKey="value" fill={CHART_COLOR} radius={[0, 4, 4, 0]} minPointSize={8} />

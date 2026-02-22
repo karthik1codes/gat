@@ -21,6 +21,9 @@ __pycache__/
 .env.local
 *.local
 
+# Node (if install run from repo root)
+node_modules/
+
 # IDE
 .idea
 .vscode/

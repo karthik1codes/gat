@@ -69,7 +69,9 @@ def test_vault_lock_unlock():
     vm = VaultManager(inactivity_timeout_seconds=60)
     assert vm.get_state() == VaultState.LOCKED
     assert not vm.is_unlocked()
-    salt = vm.load_vault(b"password123", salt=None)
+    result = vm.load_vault(b"password123", salt=None)
+    # When creating (salt=None), returns (salt, verifier); when re-unlocking, returns salt
+    salt = result[0] if isinstance(result, tuple) else result
     assert len(salt) >= 16
     assert vm.is_unlocked()
     assert vm.get_state() == VaultState.UNLOCKED

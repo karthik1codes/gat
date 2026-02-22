@@ -39,8 +39,6 @@ export default function MatrixRain() {
 
     const initColumns = () => {
       columns.length = 0
-      const w = window.innerWidth
-      const spacing = w / colCount
       for (let i = 0; i < colCount; i++) {
         const len = 12 + Math.floor(Math.random() * 18)
         const charsArr: string[] = []
