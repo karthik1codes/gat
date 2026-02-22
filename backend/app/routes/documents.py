@@ -34,6 +34,36 @@ from crypto.filename_encryption import encrypt_filename_structured
 DOC_METADATA_FILENAME = "doc_metadata.json"
 
 
+def _pdf_to_text(pdf_bytes: bytes) -> bytes:
+    """Extract text from PDF bytes; return UTF-8 bytes for indexing. Raises ValueError on failure."""
+    from io import BytesIO
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        raise ValueError("PDF support not available. Install pypdf: pip install pypdf")
+    if not pdf_bytes or len(pdf_bytes) < 100:
+        raise ValueError("File is too small or empty to be a valid PDF.")
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes))
+    except Exception as e:
+        raise ValueError(f"Could not read PDF: {e!s}")
+    parts = []
+    try:
+        for page in reader.pages:
+            t = page.extract_text()
+            if t is not None and t.strip():
+                parts.append(t)
+    except Exception as e:
+        raise ValueError(f"Could not extract text from PDF: {e!s}")
+    text = "\n".join(parts).strip()
+    if not text:
+        raise ValueError(
+            "No text could be extracted from this PDF (e.g. image-only or scanned). "
+            "Use a PDF with selectable text, or convert with OCR."
+        )
+    return text.encode("utf-8", errors="replace")
+
+
 def _doc_metadata_path(user_id: str, vault_id: str) -> Path:
     return get_storage_dir(user_id, vault_id) / DOC_METADATA_FILENAME
 
@@ -157,6 +187,11 @@ async def upload_documents(
                 status_code=400,
                 detail=f"Upload failed: file type not allowed. Allowed: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}.",
             )
+            if ext == ".pdf":
+                try:
+                    content = _pdf_to_text(content)
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=str(e))  # skip PDFs with no extractable text
         base = re.sub(r"[^\w\-.]", "_", f.filename.strip())[:100]
         if not base:
             base = "doc"

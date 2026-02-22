@@ -1,9 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
 import { performanceApi, type RealPerformanceMetrics } from '../api/client'
 
 const cardItem = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } }
 const btnTap = { scale: 0.98 }
+
+const CHART_COLOR = 'rgba(139, 92, 246, 0.85)'
+const CHART_GRID = 'rgba(255, 255, 255, 0.06)'
 
 export default function PerformancePage() {
   const [metrics, setMetrics] = useState<RealPerformanceMetrics | null>(null)
@@ -125,6 +137,117 @@ export default function PerformancePage() {
               )}
             </div>
           </div>
+
+          {/* Per-document graphs: each document has its own bar, no combined totals */}
+          {(() => {
+            const docs = metrics!.documents || []
+            const truncate = (id: string, max = 22) => (id.length > max ? id.slice(0, max - 1) + '…' : id)
+            const minChartHeight = 120 + docs.length * 28
+            const chartHeight = Math.max(minChartHeight, 220)
+            return (
+              <>
+                {/* Index size per document (KB) - one bar per document */}
+                <div className="rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] p-4 mb-6">
+                  <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Index size per document (KB)</h3>
+                  <p className="text-xs text-[var(--color-muted)] mb-2">Each bar is one document; value is that document’s share of the index.</p>
+                  <div className="w-full min-w-0" style={{ height: chartHeight }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={docs.map((d) => ({ name: truncate(d.id), fullName: d.id, value: d.index_share_kb }))}
+                        layout="vertical"
+                        margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+                        <XAxis type="number" tick={{ fill: 'var(--color-muted)', fontSize: 11 }} unit=" KB" />
+                        <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}
+                          formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [`${value} KB`, props.payload.fullName]}
+                        />
+                        <Bar dataKey="value" fill={CHART_COLOR} radius={[0, 4, 4, 0]} minPointSize={8} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Search latency per matched document (ms) - one bar per document that matched last search */}
+                <div className="rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] p-4 mb-6">
+                  <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Search latency per matched document (ms)</h3>
+                  <p className="text-xs text-[var(--color-muted)] mb-2">One bar per document returned by the last search; value is the same search latency for that query.</p>
+                  {hasSearch && docs.some((d) => d.matched_in_last_search) ? (
+                    <div className="w-full min-w-0" style={{ height: chartHeight }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={docs
+                            .filter((d) => d.matched_in_last_search)
+                            .map((d) => ({
+                              name: truncate(d.id),
+                              fullName: d.id,
+                              value: metrics!.last_search_latency_ms ?? 0,
+                            }))}
+                          layout="vertical"
+                          margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+                          <XAxis type="number" tick={{ fill: 'var(--color-muted)', fontSize: 11 }} unit=" ms" />
+                          <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}
+                            formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [
+                              `${Number(value).toFixed(2)} ms`,
+                              props.payload.fullName,
+                            ]}
+                          />
+                          <Bar dataKey="value" fill={CHART_COLOR} radius={[0, 4, 4, 0]} minPointSize={8} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center text-[var(--color-muted)] text-sm" style={{ minHeight: 120 }}>
+                      {hasSearch
+                        ? 'No documents matched the last search.'
+                        : 'Run a search on Documents to see latency per matched document here.'}
+                    </div>
+                  )}
+                </div>
+
+                {/* Encryption time per document (ms) - one bar per document */}
+                {docs.some((d) => d.encryption_ms != null) && (
+                  <div className="rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] p-4 mb-6">
+                    <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Encryption time per document (ms)</h3>
+                    <p className="text-xs text-[var(--color-muted)] mb-2">One bar per document; value is encryption time from the last upload that included this doc.</p>
+                    <div className="w-full min-w-0" style={{ height: chartHeight }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={docs
+                            .filter((d) => d.encryption_ms != null)
+                            .map((d) => ({
+                              name: truncate(d.id),
+                              fullName: d.id,
+                              value: d.encryption_ms!,
+                            }))}
+                          layout="vertical"
+                          margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+                          <XAxis type="number" tick={{ fill: 'var(--color-muted)', fontSize: 11 }} unit=" ms" />
+                          <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}
+                            formatter={(value: number, _name: string, props: { payload: { fullName: string } }) => [
+                              `${value.toFixed(2)} ms`,
+                              props.payload.fullName,
+                            ]}
+                          />
+                          <Bar dataKey="value" fill={CHART_COLOR} radius={[0, 4, 4, 0]} minPointSize={8} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
 
           <h3 className="text-sm font-semibold text-[var(--color-text)] mb-2">Per document</h3>
           <div className="overflow-x-auto">

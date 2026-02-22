@@ -38,7 +38,7 @@ USER_STORAGE_BASE = ROOT_DIR / "backend" / "data" / "user_storage"
 # Input validation
 MAX_UPLOAD_BYTES = int(os.environ.get("GAT_MAX_UPLOAD_BYTES", 5 * 1024 * 1024))  # 5 MiB
 def _allowed_extensions() -> frozenset:
-    raw = os.environ.get("GAT_ALLOWED_EXTENSIONS", ".txt,.md,.csv").lower().replace(" ", "")
+    raw = os.environ.get("GAT_ALLOWED_EXTENSIONS", ".txt,.md,.csv,.pdf").lower().replace(" ", "")
     parts = [p.strip() for p in raw.split(",") if p.strip()]
     return frozenset(p if p.startswith(".") else f".{p}" for p in parts)
 

@@ -299,7 +299,7 @@ export default function Dashboard() {
 
         <h2 className="text-lg font-medium text-[var(--color-text)] mb-3">Upload documents</h2>
         <p className="text-[var(--color-muted)] text-sm mb-4">
-          Files are encrypted and indexed by keywords. Server never sees plaintext.
+          Files are encrypted and indexed by keywords. Server never sees plaintext. Supports .txt, .md, .csv, and .pdf (PDF text is extracted for search).
         </p>
         <motion.label
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-medium cursor-pointer transition-shadow duration-200 hover:shadow-[0_0_16px_rgba(139,92,246,0.4)] disabled:opacity-50"
@@ -309,7 +309,7 @@ export default function Dashboard() {
           <input
             type="file"
             multiple
-            accept=".txt,.md,.csv"
+            accept=".txt,.md,.csv,.pdf"
             className="sr-only"
             onChange={handleUpload}
             disabled={uploading}
@@ -374,18 +374,24 @@ export default function Dashboard() {
                 )}
               </div>
             ))}
-            <details className="mt-3">
-              <summary className="cursor-pointer font-medium text-[var(--color-text)]">What server sees</summary>
-              <div className="mt-2 p-3 rounded bg-[var(--color-surface)] text-sm text-[var(--color-muted)]">
-                <p className="mb-2">Server sees only:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  {uploadDebug.map((f, i) => (
-                    <li key={i}>Encrypted filename / doc ID, ciphertext size ({f.ciphertext_size} bytes)</li>
-                  ))}
-                </ul>
-                <p className="mt-2 font-medium text-[var(--color-text)]">Server does NOT see: plaintext content, keyword text, secret key.</p>
-              </div>
-            </details>
+            <div className="mt-3 p-4 rounded-lg border-2 border-[var(--color-primary)]/40 bg-[var(--color-surface)]">
+              <h4 className="text-sm font-semibold text-[var(--color-text)] mb-3">What the server sees (for judges)</h4>
+              <dl className="space-y-3 text-sm">
+                {uploadDebug.map((f, i) => (
+                  <div key={i}>
+                    <dt className="font-medium text-[var(--color-muted)]">Encrypted file / doc ID</dt>
+                    <dd className="mt-0.5 font-mono text-xs break-all text-[var(--color-text)]">
+                      {lastUploaded[i]?.id ?? `File ${i + 1}`}
+                    </dd>
+                    <dt className="font-medium text-[var(--color-muted)] mt-1">Ciphertext size</dt>
+                    <dd className="mt-0.5 text-[var(--color-text)]">{f.ciphertext_size} bytes</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 pt-3 border-t border-[var(--color-border)] text-xs font-medium text-[var(--color-muted)]">
+                Server does NOT see: plaintext content, keyword text, secret key.
+              </p>
+            </div>
           </div>
         )}
 
@@ -503,13 +509,32 @@ export default function Dashboard() {
                     <p className="text-[var(--color-muted)]">Encrypted document(s) received → decryption successful</p>
                   </div>
                 </div>
-                <details className="mt-3">
-                  <summary className="cursor-pointer font-medium text-[var(--color-text)]">What server sees</summary>
-                  <div className="mt-2 p-3 rounded bg-[var(--color-surface)] text-sm text-[var(--color-muted)]">
-                    <p className="mb-2">Server sees only: search token, matched encrypted doc IDs, result count ({searchDebug.result_count}).</p>
-                    <p className="font-medium text-[var(--color-text)]">Server does NOT see: plaintext keyword, secret key, document contents.</p>
-                  </div>
-                </details>
+                <div className="mt-3 p-4 rounded-lg border-2 border-[var(--color-primary)]/40 bg-[var(--color-surface)]">
+                  <h4 className="text-sm font-semibold text-[var(--color-text)] mb-3">What the server sees (for judges)</h4>
+                  <dl className="space-y-2 text-sm">
+                    <div>
+                      <dt className="font-medium text-[var(--color-muted)]">Search token</dt>
+                      <dd className="mt-0.5 font-mono text-xs break-all text-[var(--color-text)]">{searchDebug.search_token || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-[var(--color-muted)]">Encrypted file / doc IDs</dt>
+                      <dd className="mt-0.5 font-mono text-xs text-[var(--color-text)]">
+                        {searchDebug.matched_encrypted_doc_ids.length === 0
+                          ? '—'
+                          : searchDebug.matched_encrypted_doc_ids.map((id) => (
+                              <span key={id} className="block break-all">{id}</span>
+                            ))}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-[var(--color-muted)]">Result count</dt>
+                      <dd className="mt-0.5 text-[var(--color-text)]">{searchDebug.result_count}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-3 pt-3 border-t border-[var(--color-border)] text-xs font-medium text-[var(--color-muted)]">
+                    Server does NOT see: plaintext keyword, secret key, document contents.
+                  </p>
+                </div>
               </div>
             )}
           </motion.div>
